@@ -19,6 +19,8 @@ python-worker/models/
 *.pdf
 dist
 dist-ssr
+public/pdfjs-wasm
+public/pdfjs-standard-fonts
 *.local
 
 # Editor directories and files

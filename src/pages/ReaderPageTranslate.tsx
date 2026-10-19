@@ -180,8 +180,9 @@ export function ReaderPageTranslate({
     setSkippedCount(0);
   }
 
+  const progress = progressHint(phase, detail);
   const notice =
-    phase === "idle" ? null : (
+    running || phase === "idle" ? null : (
       <div
         className={phase === "error" ? "reader-notice is-error" : "reader-notice"}
         role="status"
@@ -191,7 +192,6 @@ export function ReaderPageTranslate({
         data-page-translate-failed={failures.length}
       >
         <p>
-          {running ? <span className="notice-spinner" aria-hidden="true" /> : null}
           <span>
             {phaseLabel(phase)}
             {detail ? ` ${detail}` : ""}
@@ -218,9 +218,10 @@ export function ReaderPageTranslate({
         type="button"
         className={running ? "icon-only is-busy" : "icon-only"}
         aria-label="Перевести страницу"
-        title="Перевести страницу"
+        title={running ? undefined : "Перевести страницу"}
+        data-progress={running ? progress : undefined}
         aria-busy={running}
-        disabled={running}
+        aria-disabled={running}
         onClick={() => void translatePage()}
       >
         {running ? <span className="notice-spinner" aria-hidden="true" /> : <Icon name="translate" />}
@@ -326,6 +327,13 @@ function isTranslationResult(value: unknown): value is TranslationResult {
     return false;
   }
   return typeof (value as TranslationResult).translatedText === "string";
+}
+
+function progressHint(phase: Phase, detail: string): string {
+  if (detail.trim() !== "") {
+    return detail;
+  }
+  return phaseLabel(phase);
 }
 
 function phaseLabel(phase: Phase): string {

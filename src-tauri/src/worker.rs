@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::{mpsc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -31,7 +31,10 @@ enum WorkerFailure {
 
 #[cfg(test)]
 pub fn call(command: &str, payload: Option<&str>) -> Result<WorkerResponse, String> {
-    call_value(command, payload.map(|value| Value::String(value.to_string())))
+    call_value(
+        command,
+        payload.map(|value| Value::String(value.to_string())),
+    )
 }
 
 pub fn call_value(command: &str, payload: Option<Value>) -> Result<WorkerResponse, String> {
@@ -100,7 +103,9 @@ fn session_call(
     }
     let wrote = {
         let current = session.as_mut().unwrap();
-        writeln!(current.stdin, "{line}").and_then(|_| current.stdin.flush()).is_ok()
+        writeln!(current.stdin, "{line}")
+            .and_then(|_| current.stdin.flush())
+            .is_ok()
     };
     if !wrote {
         return Err(WorkerFailure::Failed(close_session(
@@ -341,7 +346,11 @@ fn spawn_worker(program: &[String], script: &PathBuf) -> Result<Child, WorkerFai
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-fn exchange(program: &[String], script: &PathBuf, line: &str) -> Result<WorkerResponse, WorkerFailure> {
+fn exchange(
+    program: &[String],
+    script: &PathBuf,
+    line: &str,
+) -> Result<WorkerResponse, WorkerFailure> {
     let mut child = spawn_worker(program, script)?;
 
     let mut stdin = child.stdin.take().ok_or_else(|| {
@@ -428,7 +437,9 @@ fn failure_message(reason: &str, stderr_text: &str) -> String {
     let stderr_text = stderr_text
         .lines()
         .map(str::trim)
-        .filter(|line| !line.is_empty() && *line != "ocr-engine-ready" && *line != "translator-ready")
+        .filter(|line| {
+            !line.is_empty() && *line != "ocr-engine-ready" && *line != "translator-ready"
+        })
         .collect::<Vec<_>>()
         .join(" ");
     if stderr_text.is_empty() {
@@ -535,13 +546,22 @@ mod tests {
         assert!(scan_result["blocks"].as_array().unwrap().is_empty());
 
         assert_eq!(analyze(&text_path, 0).error.unwrap().code, "INVALID_PAGE");
-        assert_eq!(analyze(&text_path, 9).error.unwrap().code, "PAGE_OUT_OF_RANGE");
+        assert_eq!(
+            analyze(&text_path, 9).error.unwrap().code,
+            "PAGE_OUT_OF_RANGE"
+        );
         assert_eq!(
             analyze(&dir.join("missing.pdf"), 1).error.unwrap().code,
             "FILE_NOT_FOUND"
         );
-        assert_eq!(analyze(&dir.join("broken.pdf"), 1).error.unwrap().code, "INVALID_PDF");
-        assert_eq!(analyze(&dir.join("locked.pdf"), 1).error.unwrap().code, "PDF_ERROR");
+        assert_eq!(
+            analyze(&dir.join("broken.pdf"), 1).error.unwrap().code,
+            "INVALID_PDF"
+        );
+        assert_eq!(
+            analyze(&dir.join("locked.pdf"), 1).error.unwrap().code,
+            "PDF_ERROR"
+        );
     }
 
     fn analyze(path: &std::path::Path, page_number: i64) -> WorkerResponse {
@@ -590,13 +610,18 @@ mod tests {
         let (responses, stderr) = talk(&requests);
         assert_eq!(responses[0].error.as_ref().unwrap().code, "FILE_NOT_FOUND");
         assert_eq!(responses[1].error.as_ref().unwrap().code, "INVALID_REGION");
-        assert_eq!(responses[2].error.as_ref().unwrap().code, "PAGE_OUT_OF_RANGE");
+        assert_eq!(
+            responses[2].error.as_ref().unwrap().code,
+            "PAGE_OUT_OF_RANGE"
+        );
         let both = responses[3].result.as_ref().unwrap();
         let both_text = both["text"].as_str().unwrap();
         assert!(both_text.contains("Hello OCR"), "{both_text}");
         assert!(both_text.contains("Small note"), "{both_text}");
         assert!(both["blocks"].as_array().unwrap().len() >= 2);
-        let small = responses[4].result.as_ref().unwrap()["text"].as_str().unwrap();
+        let small = responses[4].result.as_ref().unwrap()["text"]
+            .as_str()
+            .unwrap();
         assert!(small.contains("Small note"), "{small}");
         assert!(!small.contains("Hello"), "{small}");
         let blank = responses[5].result.as_ref().unwrap();
@@ -646,14 +671,21 @@ mod tests {
                 .contains("Hello OCR")
         );
         assert_eq!(
-            responses[2].result.as_ref().unwrap()["translatedText"].as_str().unwrap(),
+            responses[2].result.as_ref().unwrap()["translatedText"]
+                .as_str()
+                .unwrap(),
             "Лиса стоит возле дерева."
         );
         assert_eq!(
-            responses[3].result.as_ref().unwrap()["translatedText"].as_str().unwrap(),
+            responses[3].result.as_ref().unwrap()["translatedText"]
+                .as_str()
+                .unwrap(),
             "Привет."
         );
-        assert_eq!(responses[4].error.as_ref().unwrap().code, "UNSUPPORTED_LANGUAGE");
+        assert_eq!(
+            responses[4].error.as_ref().unwrap().code,
+            "UNSUPPORTED_LANGUAGE"
+        );
         assert_eq!(responses[5].error.as_ref().unwrap().code, "INVALID_PAYLOAD");
         assert_eq!(stderr.matches("translator-ready").count(), 1);
         assert_eq!(stderr.matches("ocr-engine-ready").count(), 1);
@@ -677,7 +709,14 @@ mod tests {
         .to_string()
     }
 
-    fn request(path: &std::path::Path, page: i64, x: f64, y: f64, width: f64, height: f64) -> String {
+    fn request(
+        path: &std::path::Path,
+        page: i64,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    ) -> String {
         serde_json::json!({
             "command": "ocr_region",
             "payload": {
@@ -724,7 +763,10 @@ mod tests {
             .filter(|line| line.starts_with('{'))
             .map(|line| serde_json::from_str(line).unwrap())
             .collect();
-        (responses, String::from_utf8_lossy(&output.stderr).to_string())
+        (
+            responses,
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        )
     }
 
     fn interpreter() -> Vec<String> {

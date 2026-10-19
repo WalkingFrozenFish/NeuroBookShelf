@@ -51,6 +51,10 @@ export function clearLibrary(): Promise<void> {
   return invoke("clear_library");
 }
 
+export function seedMockLibrary(): Promise<string> {
+  return invoke<string>("seed_mock_library");
+}
+
 export function listDocuments(): Promise<DocumentRecord[]> {
   return invoke<DocumentRecord[]>("list_documents");
 }
@@ -155,6 +159,10 @@ export function updateNote(id: number, body: string): Promise<NoteRecord> {
 
 export function deleteNote(id: number): Promise<void> {
   return invoke("delete_note", { id });
+}
+
+export function deleteDocumentNotes(documentId: number): Promise<void> {
+  return invoke("delete_document_notes", { documentId });
 }
 
 export type DictionaryScope = "document" | "global";
@@ -276,6 +284,10 @@ export function updateTranslationBlock(
 
 export function deleteTranslationBlock(id: number): Promise<void> {
   return invoke("delete_translation_block", { id });
+}
+
+export function deleteDocumentTranslations(documentId: number): Promise<void> {
+  return invoke("delete_document_translations", { documentId });
 }
 
 export function listTranslationVersions(blockId: number): Promise<TranslationVersionRecord[]> {

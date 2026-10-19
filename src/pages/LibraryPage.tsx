@@ -1,14 +1,16 @@
 import { DragEvent, FormEvent, ReactNode, useEffect, useRef, useState } from "react";
-import { AnnotationMode, getDocument, type RenderTask } from "pdfjs-dist";
+import { AnnotationMode, type RenderTask } from "pdfjs-dist";
 import { confirmAction } from "../confirm";
 import { Icon } from "../icons";
 import { themes } from "../theme";
-import "../pdfSetup";
+import { openPdf } from "../pdfSetup";
 import {
   createShelf,
   createTag,
   clearLibrary,
   databasePath,
+  deleteDocumentNotes,
+  deleteDocumentTranslations,
   deleteShelf,
   deleteTag,
   DocumentRecord,
@@ -21,6 +23,7 @@ import {
   relocateDatabase,
   resetShelves,
   resetTags,
+  seedMockLibrary,
   NamedRecord,
   readDocumentPdf,
   trashDocument,
@@ -38,10 +41,12 @@ type LibraryData = {
 
 export function LibraryPage({
   onOpen,
+  onOpenDictionary,
   theme,
   onTheme,
 }: {
   onOpen: (id: number) => void;
+  onOpenDictionary: () => void;
   theme: string;
   onTheme: (theme: string) => Promise<void>;
 }) {
@@ -132,10 +137,23 @@ export function LibraryPage({
         tags={data.tags}
         pending={pending}
         onOpen={onOpen}
+        onOpenDictionary={onOpenDictionary}
         onUpdate={(id, title, shelfIds, tagIds) =>
           run(() => updateDocument(id, title, shelfIds, tagIds).then(() => undefined))
         }
         onTrash={(id) => run(() => trashDocument(id))}
+        onClearTranslations={(id) =>
+          run(async () => {
+            await deleteDocumentTranslations(id);
+            setNotice("Переводы этой книги удалены");
+          })
+        }
+        onClearNotes={(id) =>
+          run(async () => {
+            await deleteDocumentNotes(id);
+            setNotice("Заметки этой книги удалены");
+          })
+        }
         onExport={(id) =>
           run(async () => {
             const exported = await exportPdf(id);
@@ -186,6 +204,18 @@ export function LibraryPage({
         onResetShelves={() => run(() => resetShelves())}
         onResetTags={() => run(() => resetTags())}
         onClearLibrary={() => run(() => clearLibrary())}
+        onSeed={async () => {
+          if (
+            !(await confirmAction(
+              "Добавить примеры в библиотеку? Появятся книги с короткими PDF, полки, теги, слова и две книги в корзине.",
+            ))
+          ) {
+            return false;
+          }
+          return run(async () => {
+            setNotice(await seedMockLibrary());
+          });
+        }}
         error={error}
         notice={notice}
       />
@@ -207,8 +237,11 @@ function DocumentsSection({
   openShelf,
   onOpenShelf,
   onOpen,
+  onOpenDictionary,
   onUpdate,
   onTrash,
+  onClearTranslations,
+  onClearNotes,
   onExport,
   onImport,
   onAddToShelf,
@@ -225,6 +258,7 @@ function DocumentsSection({
   onResetShelves,
   onResetTags,
   onClearLibrary,
+  onSeed,
   error,
   notice,
 }: {
@@ -235,6 +269,7 @@ function DocumentsSection({
   openShelf: ShelfView;
   onOpenShelf: (shelf: ShelfView) => void;
   onOpen: (id: number) => void;
+  onOpenDictionary: () => void;
   onUpdate: (
     id: number,
     title: string,
@@ -242,6 +277,8 @@ function DocumentsSection({
     tagIds: number[],
   ) => Promise<boolean>;
   onTrash: (id: number) => Promise<boolean>;
+  onClearTranslations: (id: number) => Promise<boolean>;
+  onClearNotes: (id: number) => Promise<boolean>;
   onExport: (id: number) => Promise<boolean>;
   onImport: () => Promise<boolean>;
   onAddToShelf: (documentId: number, shelfId: number) => Promise<boolean>;
@@ -258,6 +295,7 @@ function DocumentsSection({
   onResetShelves: () => Promise<boolean>;
   onResetTags: () => Promise<boolean>;
   onClearLibrary: () => Promise<boolean>;
+  onSeed: () => Promise<boolean>;
   error: string;
   notice: string;
 }) {
@@ -557,6 +595,16 @@ function DocumentsSection({
                 </div>
               </section>
               <section className="settings-block">
+                <h3>Примеры</h3>
+                <p className="meta">
+                  Книги с короткими PDF, полки, теги, слова словаря и две книги в корзине. Повторное
+                  нажатие добавит только то, чего ещё нет.
+                </p>
+                <button type="button" disabled={pending} onClick={() => void onSeed()}>
+                  Добавить примеры
+                </button>
+              </section>
+              <section className="settings-block">
                 <h3>Сброс полок</h3>
                 <p className="meta">Будут удалены все полки. Книги и теги останутся.</p>
                 <button type="button" disabled={pending} onClick={() => setConfirmKind("shelves")}>
@@ -605,12 +653,21 @@ function DocumentsSection({
             <h2>{shelfName}</h2>
             <p className="meta">{visible.length}</p>
           </div>
-          {documents.length === 0 ? (
-        <p>Документов пока нет.</p>
-      ) : visible.length === 0 ? (
-        <p>Ничего не найдено.</p>
-      ) : (
-        <ul className="book-grid">
+          <ul className="book-grid">
+          <li className="dictionary-tile" data-dictionary-card="">
+            <button type="button" className="book-cover dictionary-open" onClick={onOpenDictionary}>
+              <span className="dictionary-cover">
+                <span className="dictionary-cover-kicker">EN · RU</span>
+                <span className="dictionary-cover-mark">Aa</span>
+              </span>
+              <strong className="book-name">Словарь</strong>
+            </button>
+            <p className="dictionary-tile-note">Слова из книг</p>
+            <button type="button" className="book-read primary" onClick={onOpenDictionary}>
+              <Icon name="dictionary" />
+              Открыть
+            </button>
+          </li>
           {visible.map((document) => (
             <li
               key={document.id}
@@ -652,7 +709,11 @@ function DocumentsSection({
             </li>
           ))}
         </ul>
-      )}
+          {documents.length === 0 ? (
+            <p>Документов пока нет.</p>
+          ) : visible.length === 0 ? (
+            <p>Ничего не найдено.</p>
+          ) : null}
             </>
           )}
         </div>
@@ -672,6 +733,18 @@ function DocumentsSection({
               return onTrash(settingsBook.id);
             }
             return Promise.resolve(false);
+          }}
+          onClearTranslations={async () => {
+            if (await confirmAction(`Удалить все переводы в «${settingsBook.title}»? Закладки и заметки останутся.`)) {
+              return onClearTranslations(settingsBook.id);
+            }
+            return false;
+          }}
+          onClearNotes={async () => {
+            if (await confirmAction(`Удалить все заметки в «${settingsBook.title}»? Переводы и закладки останутся.`)) {
+              return onClearNotes(settingsBook.id);
+            }
+            return false;
           }}
         />
       ) : null}
@@ -858,14 +931,14 @@ function BookCover({ documentId }: { documentId: number }) {
 
   useEffect(() => {
     const state = { cancelled: false, task: null as RenderTask | null };
-    let loading: ReturnType<typeof getDocument> | null = null;
+    let loading: ReturnType<typeof openPdf> | null = null;
     async function draw() {
       try {
         const payload = await readDocumentPdf(documentId);
         if (state.cancelled) {
           return;
         }
-        loading = getDocument({ data: toBytes(payload) });
+        loading = openPdf(toBytes(payload));
         const pdf = await loading.promise;
         if (state.cancelled) {
           await pdf.destroy();
@@ -1020,6 +1093,8 @@ function BookSettings({
   onSetLinks,
   onExport,
   onTrash,
+  onClearTranslations,
+  onClearNotes,
 }: {
   document: DocumentRecord;
   shelves: NamedRecord[];
@@ -1030,6 +1105,8 @@ function BookSettings({
   onSetLinks: (shelfIds: number[], tagIds: number[]) => Promise<boolean>;
   onExport: () => Promise<boolean>;
   onTrash: () => Promise<boolean>;
+  onClearTranslations: () => Promise<boolean>;
+  onClearNotes: () => Promise<boolean>;
 }) {
   const [title, setTitle] = useState(document.title);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -1146,15 +1223,35 @@ function BookSettings({
         )}
         <div className="book-settings-actions">
           {document.path ? (
-            <button type="button" disabled={pending} onClick={() => void onExport()}>
-              <Icon name="export" />
-              Экспорт
-            </button>
+            <section className="settings-block">
+              <h3>Экспорт</h3>
+              <p className="meta">Сохранить PDF этой книги в выбранное место.</p>
+              <button type="button" disabled={pending} onClick={() => void onExport()}>
+                Экспорт
+              </button>
+            </section>
           ) : null}
-          <button type="button" className="danger" disabled={pending} onClick={() => void onTrash()}>
-            <Icon name="trash" />
-            В корзину
-          </button>
+          <section className="settings-block">
+            <h3>Переводы</h3>
+            <p className="meta">Будут удалены все переводы этой книги. Закладки и заметки останутся.</p>
+            <button type="button" className="danger" disabled={pending} onClick={() => void onClearTranslations()}>
+              Удалить переводы
+            </button>
+          </section>
+          <section className="settings-block">
+            <h3>Заметки</h3>
+            <p className="meta">Будут удалены все заметки этой книги. Переводы и закладки останутся.</p>
+            <button type="button" className="danger" disabled={pending} onClick={() => void onClearNotes()}>
+              Удалить заметки
+            </button>
+          </section>
+          <section className="settings-block">
+            <h3>Корзина</h3>
+            <p className="meta">Книга исчезнет из библиотеки. Файл на компьютере не удаляется.</p>
+            <button type="button" className="danger" disabled={pending} onClick={() => void onTrash()}>
+              В корзину
+            </button>
+          </section>
         </div>
       </div>
     </div>

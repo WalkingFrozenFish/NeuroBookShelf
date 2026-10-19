@@ -18,8 +18,6 @@ type IconName =
   | "page"
   | "select"
   | "overlay"
-  | "popups"
-  | "popups-off"
   | "clear"
   | "notes"
   | "bookmark"
@@ -110,27 +108,6 @@ const paths: Record<IconName, ReactNode> = {
   overlay: (
     <>
       <path d="M5 6h14v9H8l-3 3V6Z" />
-    </>
-  ),
-  popups: (
-    <>
-      <path d="M3.5 4h9v16h-9V4Z" />
-      <path d="M6 8h4" />
-      <path d="M6 11h4" />
-      <path d="M6 14h2.5" />
-      <path d="M12.5 5.5H20v4h-4l-1.5 1.5v-5.5Z" />
-      <path d="M12.5 13H20v4h-4l-1.5 1.5V13Z" />
-    </>
-  ),
-  "popups-off": (
-    <>
-      <path d="M3.5 4h9v16h-9V4Z" />
-      <path d="M6 8h4" />
-      <path d="M6 11h4" />
-      <path d="M6 14h2.5" />
-      <path d="M12.5 5.5H20v4h-4l-1.5 1.5v-5.5Z" />
-      <path d="M12.5 13H20v4h-4l-1.5 1.5V13Z" />
-      <path d="M4 20 20 4" />
     </>
   ),
   clear: (

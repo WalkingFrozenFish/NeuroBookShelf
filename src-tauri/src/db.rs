@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,8 +43,7 @@ pub fn open(path: &Path) -> Result<Connection, String> {
         std::fs::create_dir_all(parent)
             .map_err(|err| format!("Не удалось создать каталог базы: {err}"))?;
     }
-    let conn = Connection::open(path)
-        .map_err(|err| format!("Не удалось открыть SQLite: {err}"))?;
+    let conn = Connection::open(path).map_err(|err| format!("Не удалось открыть SQLite: {err}"))?;
     conn.pragma_update(None, "foreign_keys", 1)
         .map_err(|err| format!("Не удалось включить внешние ключи: {err}"))?;
     migrate(&conn)?;
@@ -81,9 +80,7 @@ fn list_documents_filtered(
 ) -> Result<Vec<Document>, String> {
     let sql = format!("{DOCUMENT_SELECT} {filter} {order}");
     let mut statement = conn.prepare(&sql).map_err(sql_error)?;
-    let rows = statement
-        .query_map([], map_document)
-        .map_err(sql_error)?;
+    let rows = statement.query_map([], map_document).map_err(sql_error)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(sql_error)
 }
 
@@ -157,11 +154,8 @@ pub fn update_document(
     if updated == 0 {
         return Err("Документ не найден".to_string());
     }
-    tx.execute(
-        "DELETE FROM document_shelves WHERE document_id = ?1",
-        [id],
-    )
-    .map_err(sql_error)?;
+    tx.execute("DELETE FROM document_shelves WHERE document_id = ?1", [id])
+        .map_err(sql_error)?;
     tx.execute("DELETE FROM document_tags WHERE document_id = ?1", [id])
         .map_err(sql_error)?;
     insert_links(&tx, id, &shelf_ids, &tag_ids)?;
@@ -384,8 +378,8 @@ pub fn list_dictionary_entries(
     let query = query.trim().to_lowercase();
     if !query.is_empty() {
         entries.retain(|entry| {
-            entry.source_text.to_lowercase().contains(&query)
-                || entry.translated_text.to_lowercase().contains(&query)
+            starts_with_word(&entry.source_text.to_lowercase(), &query)
+                || starts_with_word(&entry.translated_text.to_lowercase(), &query)
         });
     }
     entries.sort_by(|left, right| {
@@ -460,6 +454,13 @@ pub fn delete_note(conn: &Connection, id: i64) -> Result<(), String> {
     Ok(())
 }
 
+pub fn delete_document_notes(conn: &Connection, document_id: i64) -> Result<(), String> {
+    ensure_active_document(conn, document_id)?;
+    conn.execute("DELETE FROM notes WHERE document_id = ?1", [document_id])
+        .map_err(sql_error)?;
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslationBlock {
@@ -480,7 +481,8 @@ pub struct TranslationBlock {
     pub popup_height: Option<f64>,
 }
 
-const BLOCK_COLUMNS: &str = "id, document_id, page_number, source_x, source_y, source_width, source_height,
+const BLOCK_COLUMNS: &str =
+    "id, document_id, page_number, source_x, source_y, source_width, source_height,
                     ocr_text,
                     COALESCE((SELECT translated_text FROM translation_versions
                               WHERE translation_block_id = translation_blocks.id AND is_active = 1),
@@ -496,14 +498,12 @@ pub fn list_translation_blocks(
     ensure_active_document(conn, document_id)?;
     let page_number = page_number_value(page_number)?;
     let mut statement = conn
-        .prepare(
-            &format!(
-                "SELECT {BLOCK_COLUMNS}
+        .prepare(&format!(
+            "SELECT {BLOCK_COLUMNS}
                  FROM translation_blocks
                  WHERE document_id = ?1 AND page_number = ?2
                  ORDER BY id"
-            ),
-        )
+        ))
         .map_err(sql_error)?;
     let rows = statement
         .query_map(params![document_id, page_number], map_translation_block)
@@ -643,7 +643,10 @@ pub fn list_translation_versions(
     rows.collect::<Result<Vec<_>, _>>().map_err(sql_error)
 }
 
-pub fn activate_translation_version(conn: &Connection, version_id: i64) -> Result<TranslationBlock, String> {
+pub fn activate_translation_version(
+    conn: &Connection,
+    version_id: i64,
+) -> Result<TranslationBlock, String> {
     let version = translation_version_by_id(conn, version_id)?;
     let block = translation_block_by_id(conn, version.translation_block_id)?;
     ensure_active_document(conn, block.document_id)?;
@@ -674,6 +677,16 @@ pub fn delete_translation_block(conn: &Connection, id: i64) -> Result<(), String
     if deleted == 0 {
         return Err("Перевод не найден".to_string());
     }
+    Ok(())
+}
+
+pub fn delete_document_translations(conn: &Connection, document_id: i64) -> Result<(), String> {
+    ensure_active_document(conn, document_id)?;
+    conn.execute(
+        "DELETE FROM translation_blocks WHERE document_id = ?1",
+        [document_id],
+    )
+    .map_err(sql_error)?;
     Ok(())
 }
 
@@ -846,7 +859,7 @@ fn optional_page(page_number: Option<i64>) -> Result<Option<i64>, String> {
 
 fn short_label(label: &str) -> Result<String, String> {
     let label = label.trim();
-    if label.chars().count() > 200 {
+    if label.chars().count() > 2_000 {
         return Err("Название закладки слишком длинное".to_string());
     }
     Ok(label.to_string())
@@ -936,6 +949,11 @@ fn map_dictionary_entry(row: &rusqlite::Row) -> rusqlite::Result<DictionaryEntry
         created_at: row.get(5)?,
         updated_at: row.get(6)?,
     })
+}
+
+fn starts_with_word(text: &str, query: &str) -> bool {
+    text.split(|ch: char| !ch.is_alphanumeric())
+        .any(|word| !word.is_empty() && word.starts_with(query))
 }
 
 fn dictionary_phrase(value: &str, label: &str) -> Result<String, String> {
@@ -1037,7 +1055,12 @@ pub fn list_shelves(conn: &Connection) -> Result<Vec<Shelf>, String> {
 }
 
 pub fn create_shelf(conn: &Connection, name: &str) -> Result<Shelf, String> {
-    create_named(conn, NamedTable::Shelves, name, "Полка с таким названием уже есть")
+    create_named(
+        conn,
+        NamedTable::Shelves,
+        name,
+        "Полка с таким названием уже есть",
+    )
 }
 
 pub fn update_shelf(conn: &Connection, id: i64, name: &str) -> Result<Shelf, String> {
@@ -1052,7 +1075,12 @@ pub fn update_shelf(conn: &Connection, id: i64, name: &str) -> Result<Shelf, Str
 }
 
 pub fn delete_shelf(conn: &Connection, id: i64) -> Result<(), String> {
-    delete_named(conn, "DELETE FROM shelves WHERE id = ?1", id, "Полка не найдена")
+    delete_named(
+        conn,
+        "DELETE FROM shelves WHERE id = ?1",
+        id,
+        "Полка не найдена",
+    )
 }
 
 pub fn list_tags(conn: &Connection) -> Result<Vec<Tag>, String> {
@@ -1063,7 +1091,12 @@ pub fn list_tags(conn: &Connection) -> Result<Vec<Tag>, String> {
 }
 
 pub fn create_tag(conn: &Connection, name: &str) -> Result<Tag, String> {
-    create_named(conn, NamedTable::Tags, name, "Тег с таким названием уже есть")
+    create_named(
+        conn,
+        NamedTable::Tags,
+        name,
+        "Тег с таким названием уже есть",
+    )
 }
 
 pub fn update_tag(conn: &Connection, id: i64, name: &str) -> Result<Tag, String> {
@@ -1082,14 +1115,12 @@ pub fn delete_tag(conn: &Connection, id: i64) -> Result<(), String> {
 }
 
 pub fn reset_shelves(conn: &Connection) -> Result<(), String> {
-    conn.execute("DELETE FROM shelves", [])
-        .map_err(sql_error)?;
+    conn.execute("DELETE FROM shelves", []).map_err(sql_error)?;
     Ok(())
 }
 
 pub fn reset_tags(conn: &Connection) -> Result<(), String> {
-    conn.execute("DELETE FROM tags", [])
-        .map_err(sql_error)?;
+    conn.execute("DELETE FROM tags", []).map_err(sql_error)?;
     Ok(())
 }
 
@@ -1172,7 +1203,10 @@ fn migrate(conn: &Connection) -> Result<(), String> {
         (6, include_str!("../migrations/006_bookmarks_notes.sql")),
         (7, include_str!("../migrations/007_translation_blocks.sql")),
         (8, include_str!("../migrations/008_translation_popups.sql")),
-        (9, include_str!("../migrations/009_translation_versions.sql")),
+        (
+            9,
+            include_str!("../migrations/009_translation_versions.sql"),
+        ),
         (10, include_str!("../migrations/010_dictionaries.sql")),
     ] {
         apply_migration(conn, version, sql)?;
@@ -1225,7 +1259,9 @@ fn fill_name_keys(conn: &Connection) -> Result<(), String> {
         let rows = conn
             .prepare(sql)
             .map_err(sql_error)?
-            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
             .map_err(sql_error)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(sql_error)?;
@@ -1277,7 +1313,12 @@ where
     get_named(conn, table, id, missing_message)
 }
 
-fn delete_named(conn: &Connection, sql: &str, id: i64, missing_message: &str) -> Result<(), String> {
+fn delete_named(
+    conn: &Connection,
+    sql: &str,
+    id: i64,
+    missing_message: &str,
+) -> Result<(), String> {
     let deleted = conn.execute(sql, [id]).map_err(sql_error)?;
     if deleted == 0 {
         return Err(missing_message.to_string());
@@ -1294,7 +1335,12 @@ where
     rows.collect::<Result<Vec<_>, _>>().map_err(sql_error)
 }
 
-fn get_named<T>(conn: &Connection, table: NamedTable, id: i64, missing_message: &str) -> Result<T, String>
+fn get_named<T>(
+    conn: &Connection,
+    table: NamedTable,
+    id: i64,
+    missing_message: &str,
+) -> Result<T, String>
 where
     T: FromNamed,
 {
@@ -1345,9 +1391,9 @@ fn map_named<T: FromNamed>(row: &rusqlite::Row) -> rusqlite::Result<T> {
 pub(crate) fn get_document(conn: &Connection, id: i64) -> Result<Document, String> {
     let sql = format!("{DOCUMENT_SELECT} WHERE d.id = ?1");
     conn.query_row(&sql, [id], map_document)
-    .optional()
-    .map_err(sql_error)?
-    .ok_or_else(|| "Документ не найден".to_string())
+        .optional()
+        .map_err(sql_error)?
+        .ok_or_else(|| "Документ не найден".to_string())
 }
 
 fn map_document(row: &rusqlite::Row) -> rusqlite::Result<Document> {
@@ -1423,7 +1469,9 @@ fn ensure_unique_name(
     message: &str,
 ) -> Result<(), String> {
     let count: i64 = conn
-        .query_row(table.exists_sql(), params![name, except_id], |row| row.get(0))
+        .query_row(table.exists_sql(), params![name, except_id], |row| {
+            row.get(0)
+        })
         .map_err(sql_error)?;
     if count > 0 {
         return Err(message.to_string());
@@ -1508,7 +1556,9 @@ mod tests {
         let (path, conn) = temp_db();
         open(&path).unwrap();
         let version: i64 = conn
-            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(version, 10);
         close(path, conn);
@@ -1519,22 +1569,40 @@ mod tests {
         let (path, conn) = temp_db();
         let shelf = create_shelf(&conn, "  История ").unwrap();
         assert_eq!(shelf.name, "История");
-        assert!(create_shelf(&conn, "история").unwrap_err().contains("уже есть"));
+        assert!(
+            create_shelf(&conn, "история")
+                .unwrap_err()
+                .contains("уже есть")
+        );
         assert!(create_shelf(&conn, "   ").is_err());
         let renamed = update_shelf(&conn, shelf.id, "Наука").unwrap();
         assert_eq!(renamed.name, "Наука");
-        assert!(update_shelf(&conn, 99, "Другое").unwrap_err().contains("не найдена"));
+        assert!(
+            update_shelf(&conn, 99, "Другое")
+                .unwrap_err()
+                .contains("не найдена")
+        );
         let long = create_shelf(&conn, &"я".repeat(30)).unwrap();
         assert_eq!(long.name.chars().count(), 30);
-        assert!(create_shelf(&conn, &"я".repeat(31)).unwrap_err().contains("30"));
-        assert!(update_shelf(&conn, shelf.id, &"н".repeat(31))
-            .unwrap_err()
-            .contains("30"));
+        assert!(
+            create_shelf(&conn, &"я".repeat(31))
+                .unwrap_err()
+                .contains("30")
+        );
+        assert!(
+            update_shelf(&conn, shelf.id, &"н".repeat(31))
+                .unwrap_err()
+                .contains("30")
+        );
         delete_shelf(&conn, long.id).unwrap();
         delete_shelf(&conn, shelf.id).unwrap();
         assert!(list_shelves(&conn).unwrap().is_empty());
 
-        assert!(create_tag(&conn, &"т".repeat(31)).unwrap_err().contains("30"));
+        assert!(
+            create_tag(&conn, &"т".repeat(31))
+                .unwrap_err()
+                .contains("30")
+        );
         let tag = create_tag(&conn, "важное").unwrap();
         assert_eq!(list_tags(&conn).unwrap().len(), 1);
         delete_tag(&conn, tag.id).unwrap();
@@ -1633,7 +1701,11 @@ mod tests {
 
         delete_document(&conn, document.id).unwrap();
         assert!(list_documents(&conn).unwrap().is_empty());
-        assert!(delete_document(&conn, document.id).unwrap_err().contains("не найден"));
+        assert!(
+            delete_document(&conn, document.id)
+                .unwrap_err()
+                .contains("не найден")
+        );
         close(path, conn);
     }
 
@@ -1650,7 +1722,11 @@ mod tests {
         assert_eq!(stored.last_zoom, "1.500");
 
         assert!(save_reading_state(&conn, document.id, 0, "fit-page").is_err());
-        assert!(save_reading_state(&conn, document.id, 2, "9").unwrap_err().contains("масштаб"));
+        assert!(
+            save_reading_state(&conn, document.id, 2, "9")
+                .unwrap_err()
+                .contains("масштаб")
+        );
         let unchanged = get_document(&conn, document.id).unwrap();
         assert_eq!(unchanged.last_page, 7);
         assert_eq!(unchanged.last_zoom, "1.500");
@@ -1739,14 +1815,37 @@ mod tests {
             "manual",
         )
         .unwrap();
-        assert!(create_translation_block(&conn, first.id, 0, 0.1, 0.1, 0.2, 0.2, "A", "Б", "manual").is_err());
-        assert!(create_translation_block(&conn, first.id, 2, 0.1, 0.1, 0.0, 0.2, "A", "Б", "manual").is_err());
-        assert!(create_translation_block(&conn, first.id, 2, -0.1, 0.1, 0.2, 0.2, "A", "Б", "manual").is_err());
-        assert!(create_translation_block(&conn, first.id, 2, 0.9, 0.1, 0.2, 0.2, "A", "Б", "manual").is_err());
-        assert!(create_translation_block(&conn, first.id, 2, 0.1, 0.1, 0.2, 0.2, "  ", "Б", "manual").is_err());
+        assert!(
+            create_translation_block(&conn, first.id, 0, 0.1, 0.1, 0.2, 0.2, "A", "Б", "manual")
+                .is_err()
+        );
+        assert!(
+            create_translation_block(&conn, first.id, 2, 0.1, 0.1, 0.0, 0.2, "A", "Б", "manual")
+                .is_err()
+        );
+        assert!(
+            create_translation_block(&conn, first.id, 2, -0.1, 0.1, 0.2, 0.2, "A", "Б", "manual")
+                .is_err()
+        );
+        assert!(
+            create_translation_block(&conn, first.id, 2, 0.9, 0.1, 0.2, 0.2, "A", "Б", "manual")
+                .is_err()
+        );
+        assert!(
+            create_translation_block(&conn, first.id, 2, 0.1, 0.1, 0.2, 0.2, "  ", "Б", "manual")
+                .is_err()
+        );
         assert!(list_translation_blocks(&conn, 99, 2).is_err());
-        assert!(list_translation_blocks(&conn, second.id, 2).unwrap().is_empty());
-        assert!(list_translation_blocks(&conn, first.id, 3).unwrap().is_empty());
+        assert!(
+            list_translation_blocks(&conn, second.id, 2)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            list_translation_blocks(&conn, first.id, 3)
+                .unwrap()
+                .is_empty()
+        );
         let page = list_translation_blocks(&conn, first.id, 2).unwrap();
         assert_eq!(page.len(), 2);
 
@@ -1791,23 +1890,107 @@ mod tests {
         let kept = update_translation_block(&conn, saved.id, "Fox", "Лиса стоит").unwrap();
         assert!((kept.popup_x.unwrap() - 0.5).abs() < 0.0001);
         assert!(update_translation_popup(&conn, saved.id, 0.1, 0.1, 0.0, 0.2).is_err());
-        assert!((update_translation_popup(&conn, saved.id, 1.4, -0.2, 0.2, 0.1).unwrap().popup_x.unwrap() - 0.8).abs() < 0.0001);
+        assert!(
+            (update_translation_popup(&conn, saved.id, 1.4, -0.2, 0.2, 0.1)
+                .unwrap()
+                .popup_x
+                .unwrap()
+                - 0.8)
+                .abs()
+                < 0.0001
+        );
 
         delete_translation_block(&conn, saved.id).unwrap();
         let remaining = list_translation_blocks(&conn, first.id, 2).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].id, other.id);
-        assert!(delete_translation_block(&conn, saved.id).unwrap_err().contains("не найден"));
+        assert!(
+            delete_translation_block(&conn, saved.id)
+                .unwrap_err()
+                .contains("не найден")
+        );
 
         delete_document(&conn, first.id).unwrap();
         let left: i64 = conn
-            .query_row("SELECT COUNT(*) FROM translation_blocks", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM translation_blocks", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         let versions_left: i64 = conn
-            .query_row("SELECT COUNT(*) FROM translation_versions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM translation_versions", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(left, 0);
         assert_eq!(versions_left, 0);
+        close(path, conn);
+    }
+
+    #[test]
+    fn clearing_a_book_removes_only_its_translations_or_notes() {
+        let (path, conn) = temp_db();
+        let first = create_document(&conn, "Книга", &[], &[]).unwrap();
+        let second = create_document(&conn, "Другая", &[], &[]).unwrap();
+        create_translation_block(
+            &conn, first.id, 2, 0.1, 0.1, 0.2, 0.2, "Cat", "Кот", "manual",
+        )
+        .unwrap();
+        create_translation_block(
+            &conn, second.id, 1, 0.1, 0.1, 0.2, 0.2, "Dog", "Пёс", "manual",
+        )
+        .unwrap();
+        create_note(&conn, first.id, None, "Общая").unwrap();
+        create_note(&conn, first.id, Some(2), "На странице").unwrap();
+        create_note(&conn, second.id, None, "Чужая").unwrap();
+        create_bookmark(&conn, first.id, 2, "Глава").unwrap();
+
+        delete_document_translations(&conn, first.id).unwrap();
+        assert!(
+            list_translation_blocks(&conn, first.id, 2)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            list_translation_blocks(&conn, second.id, 1).unwrap().len(),
+            1
+        );
+        assert_eq!(list_notes(&conn, first.id).unwrap().len(), 2);
+        assert_eq!(list_bookmarks(&conn, first.id).unwrap().len(), 1);
+        let versions_left: i64 = conn
+            .query_row("SELECT COUNT(*) FROM translation_versions", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(versions_left, 1);
+
+        delete_document_notes(&conn, first.id).unwrap();
+        assert!(list_notes(&conn, first.id).unwrap().is_empty());
+        assert_eq!(list_notes(&conn, second.id).unwrap().len(), 1);
+        assert_eq!(list_bookmarks(&conn, first.id).unwrap().len(), 1);
+
+        delete_document_translations(&conn, first.id).unwrap();
+        delete_document_notes(&conn, first.id).unwrap();
+        assert!(
+            delete_document_translations(&conn, 99)
+                .unwrap_err()
+                .contains("не найден")
+        );
+        assert!(
+            delete_document_notes(&conn, 99)
+                .unwrap_err()
+                .contains("не найден")
+        );
+        mark_trashed(&conn, first.id, None, None).unwrap();
+        assert!(
+            delete_document_translations(&conn, first.id)
+                .unwrap_err()
+                .contains("корзине")
+        );
+        assert!(
+            delete_document_notes(&conn, first.id)
+                .unwrap_err()
+                .contains("корзине")
+        );
         close(path, conn);
     }
 
@@ -1851,34 +2034,49 @@ mod tests {
         let (path, conn) = temp_db();
         let first = create_document(&conn, "Первая", &[], &[]).unwrap();
         let second = create_document(&conn, "Вторая", &[], &[]).unwrap();
-        let global = create_dictionary_entry(&conn, "global", None, " fox ", "лиса", "зверь").unwrap();
-        let book = create_dictionary_entry(
-            &conn,
-            "document",
-            Some(first.id),
-            "Page",
-            "Страница",
-            "",
-        )
-        .unwrap();
+        let global =
+            create_dictionary_entry(&conn, "global", None, " fox ", "лиса", "зверь").unwrap();
+        let book =
+            create_dictionary_entry(&conn, "document", Some(first.id), "Page", "Страница", "")
+                .unwrap();
         create_dictionary_entry(&conn, "document", Some(second.id), "Note", "Заметка", "").unwrap();
         assert!(create_dictionary_entry(&conn, "document", Some(first.id), "  ", "А", "").is_err());
         assert!(create_dictionary_entry(&conn, "library", None, "A", "Б", "").is_err());
         let found = list_dictionary_entries(&conn, "global", None, "ЛИС").unwrap();
+        assert!(
+            list_dictionary_entries(&conn, "global", None, "ис")
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].id, global.id);
         assert_eq!(found[0].note, "зверь");
-        assert!(list_dictionary_entries(&conn, "document", Some(first.id), "note").unwrap().is_empty());
+        assert!(
+            list_dictionary_entries(&conn, "document", Some(first.id), "note")
+                .unwrap()
+                .is_empty()
+        );
         let edited = update_dictionary_entry(&conn, book.id, "Page", "Лист", "номер").unwrap();
         assert_eq!(edited.translated_text, "Лист");
         assert_eq!(edited.note, "номер");
         delete_dictionary_entry(&conn, book.id).unwrap();
-        assert!(list_dictionary_entries(&conn, "document", Some(first.id), "").unwrap().is_empty());
+        assert!(
+            list_dictionary_entries(&conn, "document", Some(first.id), "")
+                .unwrap()
+                .is_empty()
+        );
         delete_document(&conn, first.id).unwrap();
         assert!(list_dictionary_entries(&conn, "document", Some(first.id), "").is_err());
-        assert_eq!(list_dictionary_entries(&conn, "global", None, "").unwrap().len(), 1);
         assert_eq!(
-            list_dictionary_entries(&conn, "document", Some(second.id), "").unwrap().len(),
+            list_dictionary_entries(&conn, "global", None, "")
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            list_dictionary_entries(&conn, "document", Some(second.id), "")
+                .unwrap()
+                .len(),
             1
         );
         let dictionaries: i64 = conn

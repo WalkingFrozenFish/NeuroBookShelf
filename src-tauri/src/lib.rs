@@ -1,12 +1,15 @@
 mod db;
 mod import;
+mod seed;
 mod storage;
 mod worker;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use db::{Bookmark, DictionaryEntry, Document, Note, Shelf, Tag, TranslationBlock, TranslationVersion};
+use db::{
+    Bookmark, DictionaryEntry, Document, Note, Shelf, Tag, TranslationBlock, TranslationVersion,
+};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tauri::State;
@@ -145,6 +148,15 @@ fn clear_library(db: State<AppDb>) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn seed_mock_library(db: State<AppDb>) -> Result<String, String> {
+    let documents_dir = db.documents_dir.clone();
+    let trash_dir = db.trash_dir.clone();
+    with_conn(db, |conn| {
+        seed::seed_mock_library(conn, &documents_dir, &trash_dir)
+    })
+}
+
+#[tauri::command]
 fn list_documents(db: State<AppDb>) -> Result<Vec<Document>, String> {
     with_conn(db, db::list_documents)
 }
@@ -156,7 +168,9 @@ fn create_document(
     shelf_ids: Vec<i64>,
     tag_ids: Vec<i64>,
 ) -> Result<Document, String> {
-    with_conn(db, |conn| db::create_document(conn, &title, &shelf_ids, &tag_ids))
+    with_conn(db, |conn| {
+        db::create_document(conn, &title, &shelf_ids, &tag_ids)
+    })
 }
 
 #[tauri::command]
@@ -349,7 +363,9 @@ fn create_note(
     page_number: Option<i64>,
     body: String,
 ) -> Result<Note, String> {
-    with_conn(db, |conn| db::create_note(conn, document_id, page_number, &body))
+    with_conn(db, |conn| {
+        db::create_note(conn, document_id, page_number, &body)
+    })
 }
 
 #[tauri::command]
@@ -363,13 +379,20 @@ fn delete_note(db: State<AppDb>, id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn delete_document_notes(db: State<AppDb>, document_id: i64) -> Result<(), String> {
+    with_conn(db, |conn| db::delete_document_notes(conn, document_id))
+}
+
+#[tauri::command]
 fn list_dictionary_entries(
     db: State<AppDb>,
     scope: String,
     document_id: Option<i64>,
     query: String,
 ) -> Result<Vec<DictionaryEntry>, String> {
-    with_conn(db, |conn| db::list_dictionary_entries(conn, &scope, document_id, &query))
+    with_conn(db, |conn| {
+        db::list_dictionary_entries(conn, &scope, document_id, &query)
+    })
 }
 
 #[tauri::command]
@@ -382,7 +405,14 @@ fn create_dictionary_entry(
     note: String,
 ) -> Result<DictionaryEntry, String> {
     with_conn(db, |conn| {
-        db::create_dictionary_entry(conn, &scope, document_id, &source_text, &translated_text, &note)
+        db::create_dictionary_entry(
+            conn,
+            &scope,
+            document_id,
+            &source_text,
+            &translated_text,
+            &note,
+        )
     })
 }
 
@@ -394,7 +424,9 @@ fn update_dictionary_entry(
     translated_text: String,
     note: String,
 ) -> Result<DictionaryEntry, String> {
-    with_conn(db, |conn| db::update_dictionary_entry(conn, id, &source_text, &translated_text, &note))
+    with_conn(db, |conn| {
+        db::update_dictionary_entry(conn, id, &source_text, &translated_text, &note)
+    })
 }
 
 #[tauri::command]
@@ -449,12 +481,21 @@ fn update_translation_block(
     ocr_text: String,
     translated_text: String,
 ) -> Result<TranslationBlock, String> {
-    with_conn(db, |conn| db::update_translation_block(conn, id, &ocr_text, &translated_text))
+    with_conn(db, |conn| {
+        db::update_translation_block(conn, id, &ocr_text, &translated_text)
+    })
 }
 
 #[tauri::command]
 fn delete_translation_block(db: State<AppDb>, id: i64) -> Result<(), String> {
     with_conn(db, |conn| db::delete_translation_block(conn, id))
+}
+
+#[tauri::command]
+fn delete_document_translations(db: State<AppDb>, document_id: i64) -> Result<(), String> {
+    with_conn(db, |conn| {
+        db::delete_document_translations(conn, document_id)
+    })
 }
 
 #[tauri::command]
@@ -466,12 +507,20 @@ fn list_translation_versions(
 }
 
 #[tauri::command]
-fn activate_translation_version(db: State<AppDb>, version_id: i64) -> Result<TranslationBlock, String> {
-    with_conn(db, |conn| db::activate_translation_version(conn, version_id))
+fn activate_translation_version(
+    db: State<AppDb>,
+    version_id: i64,
+) -> Result<TranslationBlock, String> {
+    with_conn(db, |conn| {
+        db::activate_translation_version(conn, version_id)
+    })
 }
 
 #[tauri::command]
-async fn retranslate_translation_block(db: State<'_, AppDb>, id: i64) -> Result<TranslationBlock, String> {
+async fn retranslate_translation_block(
+    db: State<'_, AppDb>,
+    id: i64,
+) -> Result<TranslationBlock, String> {
     let ocr_text = with_conn(db.clone(), |conn| db::translation_block_ocr(conn, id))?;
     let response = worker_call(
         "translate",
@@ -511,7 +560,9 @@ async fn retranslate_translation_block(db: State<'_, AppDb>, id: i64) -> Result<
         .get("translator")
         .and_then(|value| value.as_str())
         .unwrap_or("ctranslate2:en-ru");
-    with_conn(db, |conn| db::add_translation_version(conn, id, translated, translator))
+    with_conn(db, |conn| {
+        db::add_translation_version(conn, id, translated, translator)
+    })
 }
 
 #[tauri::command]
@@ -724,6 +775,7 @@ pub fn run() {
             reset_shelves,
             reset_tags,
             clear_library,
+            seed_mock_library,
             list_documents,
             create_document,
             update_document,
@@ -746,6 +798,7 @@ pub fn run() {
             create_note,
             update_note,
             delete_note,
+            delete_document_notes,
             list_dictionary_entries,
             create_dictionary_entry,
             update_dictionary_entry,
@@ -754,6 +807,7 @@ pub fn run() {
             create_translation_block,
             update_translation_block,
             delete_translation_block,
+            delete_document_translations,
             update_translation_popup,
             list_translation_versions,
             activate_translation_version,
