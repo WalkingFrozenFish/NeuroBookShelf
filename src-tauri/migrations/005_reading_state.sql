@@ -1,0 +1,2 @@
+ALTER TABLE documents ADD COLUMN last_page INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE documents ADD COLUMN last_zoom TEXT NOT NULL DEFAULT 'fit-width';

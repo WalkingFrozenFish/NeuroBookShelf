@@ -1,0 +1,5 @@
+DROP INDEX IF EXISTS shelves_name_nocase;
+DROP INDEX IF EXISTS tags_name_nocase;
+
+ALTER TABLE shelves ADD COLUMN name_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE tags ADD COLUMN name_key TEXT NOT NULL DEFAULT '';
