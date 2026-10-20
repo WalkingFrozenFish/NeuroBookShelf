@@ -71,6 +71,8 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: python scripts/build_runtime.py
+      - name: Verify first-run model download, OCR and translation
+        run: python scripts/smoke_models.py
       - name: Database and filesystem tests (Python protocol smoke tested above)
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --skip worker::tests
       - name: Build installers (tags also create a draft GitHub Release)

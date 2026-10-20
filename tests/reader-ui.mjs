@@ -38,10 +38,12 @@ try {
     const doc = { id: 1, title: 'Reader test book', path: '/fixture.pdf', deletedAt: null, shelfIds: [], tagIds: [], lastPage: 1, lastZoom: 'fit-width', createdAt: '', updatedAt: '', originalFilename: 'fixture.pdf', fileSize: 1000 };
     window.__testSaved = [];
     window.__testTranslateCalls = 0;
+    window.__testModelsReady = true;
     window.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
       switch (command) {
         case 'get_theme': return 'light';
-        case 'model_status': return { translationReady: true, ocrReady: true, bundledRuntime: true, installing: false, downloadBytes: 0, modelsPath: '/fixture-models', progress: null };
+        case 'model_status': return { translationReady: window.__testModelsReady, ocrReady: window.__testModelsReady, bundledRuntime: true, installing: false, downloadBytes: 200000000, modelsPath: '/fixture-models', progress: null };
+        case 'install_models': await new Promise(r => setTimeout(r, 100)); window.__testModelsReady = true; return { success: true, result: { ready: true } };
         case 'database_path': return 'fixture.db';
         case 'list_documents': return [doc];
         case 'get_document': return doc;
@@ -161,6 +163,11 @@ try {
   await page.waitForFunction(() => window.__testSaved.length === 6 && !document.querySelector('.queue-job progress'));
   await page.getByRole('button', { name: 'Назад', exact: true }).click();
   await page.getByRole('button', { name: 'Назад', exact: true }).click();
+  await page.evaluate(() => { window.__testModelsReady = false; });
+  await page.getByRole('button', { name: 'Модели', exact: true }).click();
+  await page.getByRole('button', { name: 'Скачать модели', exact: true }).click();
+  await page.getByText('Всё готово. Можно распознавать и переводить.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Готово', exact: true }).click();
   await page.screenshot({ path: 'tests/reader-ui.png' });
   assert.deepEqual(errors, []);
   console.log('UI integration passed: search, literal query, Ctrl+F, rotated page, outline, mouse selection, queue across screens, deduplication, narrow layout.');

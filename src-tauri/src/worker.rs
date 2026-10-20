@@ -393,16 +393,17 @@ fn spawn_worker(program: &[String], script: &PathBuf) -> Result<Child, WorkerFai
         .env("PYTHONUNBUFFERED", "1")
         .env("PYTHONIOENCODING", "utf-8")
         .env("KMP_DUPLICATE_LIB_OK", "TRUE")
-        .env("PYTHONNOUSERSITE", "1")
-        .env_remove("PYTHONHOME")
-        .env_remove("PYTHONPATH")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if let Some(paths) = RUNTIME.get() {
         command.env("LLR_MODEL_ROOT", &paths.models);
         if paths.bundled {
-            command.env("LLR_BUNDLED_RUNTIME", "1");
+            command
+                .env("LLR_BUNDLED_RUNTIME", "1")
+                .env("PYTHONNOUSERSITE", "1")
+                .env_remove("PYTHONHOME")
+                .env_remove("PYTHONPATH");
         }
     }
     #[cfg(windows)]
@@ -589,6 +590,7 @@ mod tests {
         let text_path = dir.join("text.pdf");
         let before = std::fs::read(&text_path).unwrap();
         let page = analyze(&text_path, 1);
+        assert!(page.success, "{page:?}");
         let result = page.result.unwrap();
         assert_eq!(result["hasTextLayer"], Value::Bool(true));
         assert_eq!(result["pageNumber"], Value::from(1));

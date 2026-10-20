@@ -36,23 +36,24 @@ def main():
     python_root = runtime / "python"
     runtime.mkdir(parents=True, exist_ok=True)
     if not python_root.exists():
-      with tarfile.open(archive) as package:
-        # Official archive is SHA256 pinned; still reject absolute/outside members.
-        for member in package.getmembers():
-            destination = (runtime / member.name).resolve()
-            if not destination.is_relative_to(runtime.resolve()):
-                raise RuntimeError("Unsafe Python archive path")
-            if member.issym() and not (destination.parent / member.linkname).resolve().is_relative_to(runtime.resolve()):
-                raise RuntimeError("Unsafe Python archive symlink")
-        if hasattr(tarfile, "data_filter"):
-            package.extractall(runtime, filter="data")
-        else:
-            package.extractall(runtime)
+        with tarfile.open(archive) as package:
+            # Official archive is SHA256 pinned; still reject absolute/outside members.
+            for member in package.getmembers():
+                destination = (runtime / member.name).resolve()
+                if not destination.is_relative_to(runtime.resolve()):
+                    raise RuntimeError("Unsafe Python archive path")
+                if member.issym() and not (destination.parent / member.linkname).resolve().is_relative_to(runtime.resolve()):
+                    raise RuntimeError("Unsafe Python archive symlink")
+            if hasattr(tarfile, "data_filter"):
+                package.extractall(runtime, filter="data")
+            else:
+                package.extractall(runtime)
     python = python_root / ("python.exe" if os.name == "nt" else "bin/python3")
     run(python, "-s", "-m", "ensurepip")
-    run(python, "-s", "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir", "--only-binary", ":all:", "-r", ROOT / "python-worker/requirements.txt")
+    run(python, "-s", "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir", "--only-binary", ":all:", "-r", ROOT / "python-worker/requirements.txt", "-c", ROOT / "python-worker/requirements.lock")
     for name in ("worker.py", "model_manager.py", "model-manifest.json"):
         shutil.copy2(ROOT / "python-worker" / name, runtime / name)
+    shutil.copy2(ROOT / "python-worker/requirements.lock", runtime / "requirements.lock")
     run(python, "-s", "-c", "import pymupdf, paddle, paddleocr, ctranslate2, sentencepiece; print('Bundled Python imports OK')")
     run(python, "-s", ROOT / "scripts/smoke_runtime.py", runtime)
     identity = os.environ.get("APPLE_SIGNING_IDENTITY", "").strip() or "-"

@@ -51,7 +51,9 @@ git push origin v0.1.0
 Actions собирает приватный CPython 3.11.14 из официальных Python standalone архивов.
 Архитектуры и SHA-256 закреплены в `scripts/python-distributions.json`.
 Зависимости ставятся в этот Python во время сборки. На компьютере пользователя установка пакетов не выполняется.
+Проверенные версии транзитивных зависимостей закреплены в `python-worker/requirements.lock`.
 `scripts/smoke_runtime.py` проверяет импорт библиотек, запуск JSON worker и чтение PDF.
+`scripts/smoke_models.py` проверяет настоящую загрузку моделей, перевод и OCR на каждом сборочном runner.
 Модели не входят в Git и установщик; источники, версии и SHA-256 находятся в `python-worker/model-manifest.json`.
 
 ## Локальная Windows-сборка
