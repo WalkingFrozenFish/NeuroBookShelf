@@ -12,7 +12,7 @@ function testPdf() {
   add('<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>');
   const page = (content, rotation = 0) => `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate ${rotation} /Resources << /Font << /F1 9 0 R >> >> /Contents ${content} 0 R >>`;
   const stream = (text) => `<< /Length ${Buffer.byteLength(text)} >>\nstream\n${text}\nendstream`;
-  add(page(4)); add(stream('BT /F1 20 Tf 72 700 Td (Hello world) Tj 0 -40 Td (A+B [x].) Tj 0 -630 Td (Bottom target) Tj ET'));
+  add(page(4)); add(stream('BT /F1 20 Tf 72 700 Td (Hello world) Tj 0 -40 Td (A+B [x].) Tj /F1 13 Tf 0 -70 Td (READING BEYOND THE PAGE) Tj 0 -30 Td (A book is more than a file in a folder.) Tj 0 -24 Td (It is a place to explore an idea, follow a question,) Tj 0 -24 Td (and keep the passages you want to revisit.) Tj 0 -48 Td (01 / Build a personal library) Tj 0 -24 Td (Give your documents a home with shelves and tags.) Tj 0 -24 Td (Your reading position is saved for the next session.) Tj 0 -48 Td (02 / Stay close to the text) Tj 0 -24 Td (Search a phrase, leave a note, or save a word.) Tj 0 -24 Td (Translate a passage without leaving the page.) Tj 0 -48 Td (03 / Keep it on your computer) Tj 0 -24 Td (After the initial model download, work offline.) Tj 0 -24 Td (Your documents remain in your own library.) Tj 0 -194 Td /F1 20 Tf (Bottom target) Tj ET'));
   add(page(6, 90)); add(stream('BT /F1 20 Tf 72 700 Td (Hello second page) Tj ET'));
   add(page(8)); add(stream(''));
   add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
@@ -33,23 +33,50 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
+  // Slow completion deterministically so intermediate PDF frames can be inspected.
+  await page.route('**/src/pages/ReaderPage.tsx*', async route => {
+    const response = await route.fetch();
+    const source = await response.text();
+    assert.ok(source.includes('await state.task.promise;'));
+    await route.fulfill({ response, body: source.replaceAll('await state.task.promise;',
+      'await state.task.promise; await new Promise(resolve => setTimeout(resolve, window.__testRenderDelay || 0));') });
+  });
   await page.route('**/__test.pdf', route => route.fulfill({ contentType: 'application/pdf', body: testPdf() }));
   await page.addInitScript(() => {
-    const doc = { id: 1, title: 'Reader test book', path: '/fixture.pdf', deletedAt: null, shelfIds: [], tagIds: [], lastPage: 1, lastZoom: 'fit-width', createdAt: '', updatedAt: '', originalFilename: 'fixture.pdf', fileSize: 1000 };
+    const doc = { id: 1, title: 'A short guide to local reading', path: '/fixture.pdf', deletedAt: null, shelfIds: [], tagIds: [], lastPage: 1, lastZoom: 'fit-width', createdAt: '', updatedAt: '', originalFilename: 'fixture.pdf', fileSize: 1000 };
     window.__testSaved = [];
     window.__testTranslateCalls = 0;
     window.__testModelsReady = true;
+    window.__testActivePair = 'en-ru';
+    window.__testTranslationSettings = { sourceLanguage: 'en', targetLanguage: 'ru' };
+    window.__testInstalling = false;
+    window.__testProgress = null;
+    window.__testFrenchReady = false;
+    window.__testAppearance = { mode: 'dark', accent: 'blue', pdf: 'original' };
     window.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
       switch (command) {
-        case 'get_theme': return 'light';
-        case 'model_status': return { translationReady: window.__testModelsReady, ocrReady: window.__testModelsReady, bundledRuntime: true, installing: false, downloadBytes: 200000000, modelsPath: '/fixture-models', progress: null };
-        case 'install_models': await new Promise(r => setTimeout(r, 100)); window.__testModelsReady = true; return { success: true, result: { ready: true } };
+        case 'get_appearance': return window.__testAppearance;
+        case 'set_appearance': window.__testAppearance = args.appearance; return;
+        case 'get_translation_settings': return { ...window.__testTranslationSettings };
+        case 'set_translation_settings': window.__testTranslationSettings = { ...args.settings }; return;
+        case 'refresh_model_catalog': return { success: true, result: {} };
+        case 'model_status': return { settings: window.__testTranslationSettings, catalogUpdatedAt: Date.now()/1000, lastTranslation: null, activePair: window.__testActivePair, catalog: [{ pair: 'en-ru', name: 'English → Russian', source: 'en', target: 'ru', sourceName: 'English', targetName: 'Russian', version: '1.9', bytes: 195746693, ready: window.__testModelsReady }, { pair: 'fr-en', name: 'French → English', source: 'fr', target: 'en', sourceName: 'French', targetName: 'English', version: '1.9', bytes: 66585033, ready: window.__testFrenchReady }], translationReady: window.__testModelsReady, ocrReady: window.__testModelsReady, bundledRuntime: true, installing: window.__testInstalling, downloadBytes: 200000000, modelsPath: '/fixture-models', progress: window.__testProgress };
+        case 'install_models':
+          window.__testInstalling = true;
+          window.__testProgress = { phase: 'downloading', downloaded: 1000000, total: 66000000 };
+          await new Promise(r => setTimeout(r, args.pair === 'fr-en' ? 2500 : 100));
+          window.__testInstalling = false;
+          if (window.__testProgress.phase === 'cancelled') return { success: false, error: { code: 'DOWNLOAD_CANCELLED', message: 'Download cancelled' } };
+          if (args.pair === 'fr-en') window.__testFrenchReady = true; else window.__testModelsReady = true;
+          window.__testProgress = { phase: 'ready' }; return { success: true, result: { ready: true } };
+        case 'cancel_model_download': window.__testProgress = { phase: 'cancelled' }; return;
+        case 'select_translation_model': window.__testActivePair = args.pair; return;
         case 'database_path': return 'fixture.db';
         case 'list_documents': return [doc];
         case 'get_document': return doc;
         case 'read_document_pdf': return fetch('/__test.pdf').then(r => r.arrayBuffer());
         case 'list_shelves': case 'list_tags': case 'list_notes': case 'list_bookmarks': case 'list_dictionary_entries': return [];
-        case 'save_reading_state': case 'set_theme': return;
+        case 'save_reading_state': return;
         case 'list_translation_blocks': return window.__testSaved.filter(b => b.pageNumber === args.pageNumber);
         case 'analyze_document_page': return { success: true, result: { hasTextLayer: true, blocks: [{ text: 'Hello test', x: 0.1, y: 0.1, width: 0.4, height: 0.1 }, { text: 'Second block', x: 0.1, y: 0.3, width: 0.4, height: 0.1 }] } };
         case 'translate_text': window.__testTranslateCalls++; await new Promise(r => setTimeout(r, 550)); return { success: true, result: { translatedText: 'Переведено', translator: 'fixture' } };
@@ -65,10 +92,37 @@ try {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByRole('button', { name: 'Читать', exact: true }).click();
   await page.waitForSelector('.pdf-text-layer span');
+  // A partially rendered white bitmap must stay hidden behind the theme's fill.
+  for (const pdfMode of ['original', 'dimmed', 'night']) {
+    await page.getByRole('combobox', { name: 'Отображение PDF', exact: true }).selectOption(pdfMode);
+    await page.evaluate(() => { window.__testRenderDelay = 750; });
+    await page.getByRole('button', { name: 'Вперёд', exact: true }).click();
+    await page.waitForSelector('.page-frame[data-rendering="true"]', { state: 'attached' });
+    const pending = await page.locator('.page-frame').evaluate(frame => ({
+      background: getComputedStyle(frame).backgroundColor,
+      visibility: getComputedStyle(frame.querySelector('canvas')).visibility,
+      busy: frame.getAttribute('aria-busy'),
+      textLayers: frame.querySelectorAll('.pdf-text-layer').length,
+    }));
+    assert.equal(pending.visibility, 'hidden');
+    assert.equal(pending.busy, 'true');
+    assert.equal(pending.textLayers, 0);
+    assert.ok(pending.background.match(/\d+/g).slice(0, 3).every(value => Number(value) < 100));
+    await page.waitForSelector('.page-frame[data-rendering="false"]');
+    assert.equal(await page.locator('.page-frame canvas').evaluate(c => getComputedStyle(c).visibility), 'visible');
+    // Abandoned draws must not reveal their page after a newer navigation starts.
+    await page.getByRole('button', { name: 'Назад', exact: true }).click();
+    await page.getByRole('button', { name: 'Вперёд', exact: true }).click();
+    await page.waitForSelector('.reader[data-reader-page="2"] .page-frame[data-rendering="false"]');
+    await page.getByRole('button', { name: 'Назад', exact: true }).click();
+    await page.waitForSelector('.reader[data-reader-page="1"] .page-frame[data-rendering="false"]');
+  }
+  await page.evaluate(() => { window.__testRenderDelay = 0; });
+  await page.getByRole('combobox', { name: 'Отображение PDF', exact: true }).selectOption('original');
   await page.setViewportSize({ width: 1100, height: 720 });
   await page.locator('.zoom-label input').fill('300');
   await page.locator('.zoom-label input').press('Enter');
-  await page.getByRole('button', { name: 'Поиск по книге', exact: true }).click();
+  await page.getByRole('button', { name: 'Поиск', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Найти в книге' }).fill('Bottom target');
   await page.locator('.pdf-search-results button').first().click();
   await page.waitForSelector('.pdf-match.current');
@@ -102,7 +156,7 @@ try {
   assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), 0);
   await page.getByRole('button', { name: 'По ширине', exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole('button', { name: 'Поиск по книге', exact: true }).click();
+  await page.getByRole('button', { name: 'Поиск', exact: true }).click();
   const input = page.getByRole('searchbox', { name: 'Найти в книге' });
   await input.fill('hello');
   await page.waitForFunction(() => document.querySelectorAll('.pdf-search-results li').length === 2);
@@ -163,12 +217,48 @@ try {
   await page.waitForFunction(() => window.__testSaved.length === 6 && !document.querySelector('.queue-job progress'));
   await page.getByRole('button', { name: 'Назад', exact: true }).click();
   await page.getByRole('button', { name: 'Назад', exact: true }).click();
+  await page.getByRole('button', { name: 'Убрать завершённые', exact: true }).click();
+  await page.getByRole('button', { name: 'Страницы', exact: true }).click();
+  await page.screenshot({ path: 'tests/reader-preview.png' });
   await page.evaluate(() => { window.__testModelsReady = false; });
-  await page.getByRole('button', { name: 'Модели', exact: true }).click();
-  await page.getByRole('button', { name: 'Скачать модели', exact: true }).click();
-  await page.getByText('Всё готово. Можно распознавать и переводить.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Готово', exact: true }).click();
+  await page.getByRole('button', { name: 'Библиотека', exact: true }).click();
+  await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+  await page.locator('.model-table tbody tr').filter({ hasText: 'English → Russian' }).getByRole('button', { name: 'Скачать', exact: true }).click();
+  await page.waitForFunction(() => window.__testModelsReady && !window.__testInstalling);
+  await page.getByRole('combobox', { name: 'Язык интерфейса', exact: true }).selectOption('en');
+  await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
+  assert.equal(await page.locator('html').getAttribute('lang'), 'en');
+  await page.getByRole('button', { name: 'Dark', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Light', exact: true }).click();
+  await page.waitForFunction(() => window.__testAppearance.mode === 'light');
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await page.waitForFunction(() => window.__testAppearance.mode === 'dark');
+  await page.getByLabel('Custom color', { exact: true }).fill('#ea681e');
+  await page.getByRole('button', { name: 'Apply color', exact: true }).click();
+  await page.waitForFunction(() => window.__testAppearance.accent === 'custom');
+  assert.equal(await page.evaluate(() => window.__testAppearance.customColor), '#ea681e');
+  const hue = await page.locator('html').evaluate(el => Number(el.style.getPropertyValue('--hue')));
+  assert.ok(hue > 20 && hue < 24);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('llr-appearance')).language), 'en');
+  const frenchRow = page.locator('.model-table tbody tr').filter({ hasText: 'French → English' });
+  await frenchRow.getByRole('button', { name: 'Download', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel download', exact: true }).click();
+  await page.getByText('Download cancelled. Completed files are kept; you can try again.', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.__testFrenchReady), false);
+  await frenchRow.getByRole('button', { name: 'Download', exact: true }).click();
+  await frenchRow.getByText('Selected automatically', { exact: true }).waitFor();
+  await page.getByRole('combobox', { name: 'Source language', exact: true }).selectOption('fr');
+  await page.waitForFunction(() => window.__testTranslationSettings.sourceLanguage === 'fr');
+  await page.getByRole('combobox', { name: 'Translate into', exact: true }).selectOption('en');
+  await page.waitForFunction(() => window.__testTranslationSettings.targetLanguage === 'en');
+  await page.getByRole('searchbox', { name: 'Search models', exact: true }).fill('fr');
+  assert.equal(await page.locator('.model-table tbody tr').count(), 1);
+  await page.getByRole('searchbox', { name: 'Search models', exact: true }).fill('');
+  await page.screenshot({ path: 'tests/settings-en.png' });
+  await page.getByRole('combobox', { name: 'Interface language', exact: true }).selectOption('ru');
+  await page.getByRole('heading', { name: 'Настройки', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Светлый', exact: true }).waitFor();
   await page.screenshot({ path: 'tests/reader-ui.png' });
   assert.deepEqual(errors, []);
-  console.log('UI integration passed: search, literal query, Ctrl+F, rotated page, outline, mouse selection, queue across screens, deduplication, narrow layout.');
+  console.log('UI integration passed: themed PDF loading in all three modes, rapid navigation, search, literal query, Ctrl+F, rotated page, outline, mouse selection, queue across screens, deduplication, narrow layout.');
 } finally { await browser.close(); }

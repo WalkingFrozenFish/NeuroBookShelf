@@ -13,7 +13,7 @@ environment.pop("PYTHONHOME", None)
 environment.pop("PYTHONPATH", None)
 environment["PYTHONNOUSERSITE"] = "1"
 environment["PYTHONDONTWRITEBYTECODE"] = "1"
-subprocess.run([str(python), "-s", "-c", "import pymupdf, paddle, paddleocr, ctranslate2, sentencepiece; print('Packaged Python imports OK')"], env=environment, check=True)
+subprocess.run([str(python), "-s", "-c", "import pymupdf, paddle, paddleocr, ctranslate2, sentencepiece, lingua; print('Packaged Python imports OK')"], env=environment, check=True)
 with tempfile.TemporaryDirectory(prefix="llr-runtime-") as directory:
     fixture = Path(directory) / "sample.pdf"
     subprocess.run([str(python), "-s", "-c", "import pymupdf,sys; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,72),'Hello packaged worker'); d.save(sys.argv[1])", str(fixture)], env=environment, check=True)

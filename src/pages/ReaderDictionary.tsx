@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { FormEvent, RefObject, useEffect, useRef, useState } from "react";
 import { confirmAction } from "../confirm";
 import { Icon } from "../icons";
@@ -165,7 +166,7 @@ export function ReaderDictionary({
 
   return (
     <div className="dictionary" data-dictionary-scope={scope}>
-      <div className="dictionary-scope" role="tablist" aria-label="Словарь">
+      <div className="dictionary-scope" role="tablist" aria-label={t("Словарь")}>
         <button
           type="button"
           role="tab"
@@ -173,8 +174,7 @@ export function ReaderDictionary({
           aria-selected={scope === "document"}
           onClick={() => onScope("document")}
         >
-          Эта книга
-        </button>
+          {t("Эта книга")}</button>
         <button
           type="button"
           role="tab"
@@ -182,26 +182,25 @@ export function ReaderDictionary({
           aria-selected={scope === "global"}
           onClick={() => onScope("global")}
         >
-          Общий
-        </button>
+          {t("Общий")}</button>
       </div>
       <p className="dictionary-hint">
-        {scope === "document" ? "Только для этой книги." : "Виден в любой книге."}
+        {scope === "document" ? t("Только для этой книги.") : t("Виден в любой книге.")}
       </p>
       <div className="dictionary-search">
         <input
           type="search"
           value={query}
-          aria-label="Поиск по словарю"
+          aria-label={t("Поиск по словарю")}
           data-dictionary-search=""
-          placeholder="Найти слово или перевод"
+          placeholder={t("Найти слово или перевод")}
           onChange={(event) => setQuery(event.target.value)}
         />
         {query ? (
           <button
             type="button"
             className="icon-button"
-            aria-label="Очистить поиск"
+            aria-label={t("Очистить поиск")}
             onClick={() => setQuery("")}
           >
             <Icon name="clear" />
@@ -213,7 +212,7 @@ export function ReaderDictionary({
         <EntryForm
           draft={draft}
           pending={pending}
-          submitLabel="Добавить"
+          submitLabel={t("Добавить")}
           sourceRef={sourceRef}
           onChange={setDraft}
           onSubmit={save}
@@ -230,21 +229,20 @@ export function ReaderDictionary({
           }}
         >
           <Icon name="plus" />
-          Добавить слово
-        </button>
+          {t("Добавить слово")}</button>
       )}
       {entries.length === 0 ? (
         <p className="dictionary-empty">
           {scope === "document"
-            ? "В словаре этой книги пока пусто. Добавьте слово или сохраните фразу из перевода."
-            : "Общий словарь пока пуст. Записи отсюда будут видны в любой книге."}
+            ? t("В словаре этой книги пока пусто. Добавьте слово или сохраните фразу из перевода.")
+            : t("Общий словарь пока пуст. Записи отсюда будут видны в любой книге.")}
         </p>
       ) : groups.length === 0 ? (
-        <p className="dictionary-empty">Ничего не нашлось. Попробуйте другое слово.</p>
+        <p className="dictionary-empty">{t("Ничего не нашлось. Попробуйте другое слово.")}</p>
       ) : (
         <>
           <p className="dictionary-summary">
-            {trimmedQuery ? `Найдено: ${groups.length}` : wordCountLabel(groups.length)}
+            {trimmedQuery ? t("Найдено: {0}", [groups.length]) : wordCountLabel(groups.length)}
           </p>
           <ul className="side-list">
             {groups.map((group) => {
@@ -265,7 +263,7 @@ export function ReaderDictionary({
                             <EntryForm
                               draft={draft}
                               pending={pending}
-                              submitLabel="Сохранить"
+                              submitLabel={t("Сохранить")}
                               sourceRef={sourceRef}
                               onChange={setDraft}
                               onSubmit={save}
@@ -285,7 +283,7 @@ export function ReaderDictionary({
                             <button
                               type="button"
                               className="icon-button"
-                              aria-label={`Изменить ${sense.translation}`}
+                              aria-label={t("Изменить {0}", [sense.translation])}
                               disabled={pending || formOpen || !entry}
                               onClick={() => {
                                 if (!entry) {
@@ -305,11 +303,11 @@ export function ReaderDictionary({
                             <button
                               type="button"
                               className="icon-button"
-                              aria-label={`Удалить ${sense.translation}`}
+                              aria-label={t("Удалить {0}", [sense.translation])}
                               disabled={pending || formOpen}
                               onClick={() => {
                                 void (async () => {
-                                  if (await confirmAction("Удалить этот перевод?")) {
+                                  if (await confirmAction(t("Удалить этот перевод?"))) {
                                     setPending(true);
                                     setError("");
                                     void Promise.all(sense.ids.map((id) => deleteDictionaryEntry(id)))
@@ -369,37 +367,34 @@ function EntryForm({
   return (
     <form className="side-form dictionary-form" onSubmit={onSubmit}>
       <label>
-        Слово или фраза
-        <input
+        {t("Слово или фраза")}<input
           ref={sourceRef}
-          aria-label="Слово или фраза"
+          aria-label={t("Слово или фраза")}
           data-dictionary-source=""
           autoComplete="off"
-          placeholder="Как в книге"
+          placeholder={t("Как в книге")}
           value={draft.sourceText}
           disabled={pending}
           onChange={(event) => onChange({ ...draft, sourceText: event.target.value })}
         />
       </label>
       <label>
-        Перевод
-        <input
-          aria-label="Перевод слова"
+        {t("Перевод")}<input
+          aria-label={t("Перевод слова")}
           data-dictionary-translation=""
           autoComplete="off"
-          placeholder="Как перевести"
+          placeholder={t("Как перевести")}
           value={draft.translatedText}
           disabled={pending}
           onChange={(event) => onChange({ ...draft, translatedText: event.target.value })}
         />
       </label>
       <label>
-        Комментарий
-        <input
-          aria-label="Комментарий"
+        {t("Комментарий")}<input
+          aria-label={t("Комментарий")}
           data-dictionary-note=""
           autoComplete="off"
-          placeholder="Необязательно"
+          placeholder={t("Необязательно")}
           value={draft.note}
           disabled={pending}
           onChange={(event) => onChange({ ...draft, note: event.target.value })}
@@ -414,8 +409,7 @@ function EntryForm({
           {submitLabel}
         </button>
         <button type="button" disabled={pending} onClick={onCancel}>
-          Отмена
-        </button>
+          {t("Отмена")}</button>
       </div>
     </form>
   );
@@ -425,11 +419,11 @@ function wordCountLabel(count: number) {
   const mod10 = count % 10;
   const mod100 = count % 100;
   if (mod10 === 1 && mod100 !== 11) {
-    return `${count} слово`;
+    return t("{0} слово", [count]);
   }
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return `${count} слова`;
+    return t("{0} слова", [count]);
   }
-  return `${count} слов`;
+  return t("{0} слов", [count]);
 }
 

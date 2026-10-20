@@ -1,5 +1,7 @@
 # Участие в разработке
 
+[English](CONTRIBUTING.en.md) · **Русский**
+
 Спасибо за интерес к NeuroBookShelf. Ошибки, предложения и вопросы оформляются через [Issues](https://github.com/WalkingFrozenFish/NeuroBookShelf/issues/new/choose). До большой доработки опишите задачу в Issue: это помогает согласовать поведение приложения и объём работы.
 
 ## Рабочий процесс

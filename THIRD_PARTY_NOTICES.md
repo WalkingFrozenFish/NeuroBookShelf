@@ -24,6 +24,8 @@ Copyright исходников NeuroBookShelf: 2026 WalkingFrozenFish and contri
 
 ## Модели
 
+Для локального определения языков используется Lingua Language Detector 2.1.1 (Apache-2.0), включая поставляемые с библиотекой языковые данные. Лицензионные файлы сохраняются вместе с wheel в приватном Python и собираются `scripts/collect_licenses.py`. Веса переводчиков загружаются отдельно; лицензия Lingua не заменяет условия модельных пакетов.
+
 ### Argos English → Russian 1.9
 
 Пакет: https://data.argosopentech.com/argospm/v1/translate-en_ru-1_9.argosmodel
@@ -31,6 +33,12 @@ Copyright исходников NeuroBookShelf: 2026 WalkingFrozenFish and contri
 Источник и SHA-256 закреплены в `python-worker/model-manifest.json`. Пакет создан Aleksey Kutashov; его README описывает данные OPUS, Wiktionary/Wiktextract и другие источники. Сопровождающий Argos указывает MIT/CC0 для модельных пакетов: https://github.com/argosopentech/argos-translate/issues/533. Это заявление поставщика, а не самостоятельная проверка прав на каждый обучающий корпус.
 
 README модели также перечисляет корпусы с собственными условиями, включая research-only формулировки. Сохраняем исходный README и metadata рядом с моделью, а копию README — в `licenses/argos-en-ru-README.md`. Перед изменением модели или использованием в закрытом/коммерческом продукте нужна отдельная проверка этих условий; AGPL приложения не отменяет права на модель и обучающие данные.
+
+### Дополнительные языковые пары Argos 1.9
+
+В каталог добавлены Russian → English, French → English и English → French. URL, точный размер и SHA-256 каждого архива закреплены в `python-worker/model-manifest.json`; архивы скачаны и проверены при добавлении. Эти модели необязательны и загружаются только после выбора пользователя.
+
+Исходные README и metadata каждого пакета сохранены в `licenses/argos-ru-en-*`, `licenses/argos-fr-en-*`, `licenses/argos-en-fr-*` и устанавливаются рядом с моделью. Французские пакеты ссылаются на OPUS-MT (Jörg Tiedemann и Santhosh Thottingal) и объявляют CC-BY 4.0 для исходных OPUS-моделей. Russian → English содержит отдельный список корпусов и условий в исходном README. Уведомления сохранены без замены лицензией приложения.
 
 ### PaddleOCR
 

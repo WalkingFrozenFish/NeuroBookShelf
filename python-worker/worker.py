@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
@@ -28,7 +29,6 @@ FONT_SIZE_RATIO = 1.5
 OCR_HEIGHT_RATIO = 2.5
 MAX_TRANSLATION_TOKENS = 160
 _engine = None
-_translator = None
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[\"“'(\[]?[A-Z])")
 
 
@@ -66,7 +66,10 @@ def handle(message):
         return warm_translator()
     if command == "install_models":
         from model_manager import install_models
-        return install_models()
+        return install_models((message.get("payload") or {}).get("pair"))
+    if command == "refresh_model_catalog":
+        from model_manager import refresh_catalog
+        return refresh_catalog()
     return error("UNKNOWN_COMMAND", "Unknown command")
 
 
@@ -764,7 +767,8 @@ class Translator:
 
 
 class LocalTranslator(Translator):
-    def __init__(self):
+    def __init__(self, pair="en-ru"):
+        self.pair = pair
         self._engine = None
         self._tokenizer = None
 
@@ -792,12 +796,14 @@ class LocalTranslator(Translator):
         if not tokens:
             return ""
         hypothesis = self._engine.translate_batch([tokens])[0].hypotheses[0]
-        return self._tokenizer.decode(hypothesis).strip()
+        # Some Argos pairs emit target pieces absent from the source tokenizer.
+        # Decode byte fallback normally, then remove remaining SentencePiece spaces.
+        return self._tokenizer.decode(hypothesis).replace("▁", " ").strip()
 
     def _ensure(self):
         if self._engine is not None:
             return
-        directory = translation_model_dir()
+        directory = translation_model_dir(self.pair)
         model = directory / "model.bin"
         tokenizer = directory / "sentencepiece.model"
         if not model.is_file() or not tokenizer.is_file():
@@ -814,28 +820,28 @@ class LocalTranslator(Translator):
             pass
 
 
-def translation_model_dir():
+def translation_model_dir(pair="en-ru"):
     override = os.environ.get("LLR_TRANSLATION_MODEL", "").strip()
-    if override:
+    if override and pair == "en-ru":
         return Path(override)
     model_root = os.environ.get("LLR_MODEL_ROOT", "").strip()
     if model_root:
-        directory = Path(model_root) / "en-ru"
+        directory = Path(model_root) / pair
         if (directory / "model.bin").is_file() or os.environ.get("LLR_BUNDLED_RUNTIME"):
             return directory
-    return Path(__file__).resolve().parent / "models" / "en-ru"
+    return Path(__file__).resolve().parent / "models" / pair
 
 
-def translator():
-    global _translator
-    if _translator is None:
-        _translator = LocalTranslator()
-    return _translator
+@lru_cache(maxsize=2)
+def translator(pair="en-ru"):
+    # Keep a two-hop translation route warm without retaining every model.
+    return LocalTranslator(pair)
 
 
 def warm_translator():
     try:
-        translator().translate("Hello.")
+        from model_manager import active_pair
+        translator(active_pair()).translate("Hello.")
     except ImportError:
         return error("MODEL_UNAVAILABLE", "Translation engine is not installed")
     except FileNotFoundError:
@@ -855,10 +861,12 @@ def translate_text(payload):
         return error("INVALID_PAYLOAD", "Translate payload requires text and language codes")
     if text.strip() == "":
         return error("EMPTY_TEXT", "Text is empty")
-    if source.strip().lower() != "en" or target.strip().lower() != "ru":
-        return error("UNSUPPORTED_LANGUAGE", "Only English to Russian is available")
+    from translation_router import RoutingError, translate_routed
     try:
-        translated = translator().translate(text)
+        translated = translate_routed(text, lambda pair, fragment: translator(pair).translate(fragment),
+                                      source.strip().lower(), target.strip().lower())
+    except RoutingError as exc:
+        return error(exc.code, str(exc))
     except ImportError:
         return error("MODEL_UNAVAILABLE", "Translation engine is not installed")
     except FileNotFoundError:
@@ -867,7 +875,7 @@ def translate_text(payload):
         return error("TRANSLATION_ERROR", f"Translation failed: {short_error(exc)}")
     return {
         "success": True,
-        "result": {"translatedText": translated, "translator": "ctranslate2:en-ru"},
+        "result": translated,
     }
 
 

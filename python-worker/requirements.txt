@@ -3,9 +3,11 @@ pymupdf==1.28.2
 # python -m pip install paddlepaddle==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 paddlepaddle==3.2.0
 paddleocr==3.7.0
-# Local English-to-Russian translation. ctranslate2 runs the model; sentencepiece tokenizes it.
+# Local translation. ctranslate2 runs the installed models; sentencepiece tokenizes them.
 # The model is not downloaded at translate time. Place the extracted Argos package in
 # python-worker/models/en-ru (model.bin, config.json, shared_vocabulary.json, sentencepiece.model).
 # Package: https://data.argosopentech.com/argospm/v1/translate-en_ru-1_9.argosmodel
 ctranslate2==4.6.0
 sentencepiece==0.2.1
+# Offline detection of source languages, including mixed-language text.
+lingua-language-detector==2.1.1

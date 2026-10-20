@@ -1,4 +1,6 @@
+import { t } from "./i18n";
 import { invoke } from "@tauri-apps/api/core";
+import type { Appearance } from "./theme";
 
 export type DocumentRecord = {
   id: number;
@@ -27,12 +29,16 @@ export function databasePath(): Promise<string> {
   return invoke<string>("database_path");
 }
 
-export function getTheme(): Promise<string> {
-  return invoke<string>("get_theme");
+export function openDatabaseFolder(): Promise<void> {
+  return invoke("open_database_folder");
 }
 
-export function setTheme(theme: string): Promise<void> {
-  return invoke("set_theme", { theme });
+export function getAppearance(): Promise<Appearance> {
+  return invoke<Appearance>("get_appearance");
+}
+
+export function setAppearance(appearance: Appearance): Promise<void> {
+  return invoke("set_appearance", { appearance });
 }
 
 export function relocateDatabase(): Promise<string | null> {
@@ -367,15 +373,43 @@ export type ModelStatus = {
   installing: boolean;
   modelsPath: string;
   downloadBytes: number;
-  progress: { phase: string; downloaded?: number; total?: number; file?: string; message?: string } | null;
+  activePair: string;
+  catalog: { pair: string; name: string; bytes: number; ready: boolean; source: string; target: string; version: string; installedVersion?: string | null; sourceName: string; targetName: string }[];
+  settings: TranslationSettings;
+  catalogUpdatedAt: number | null;
+  lastTranslation: { sourceLanguages: string[]; targetLanguage: string; pairs: string[]; phase: string; updatedAt: number } | null;
+  progress: { phase: string; downloaded?: number; total?: number; file?: string; pair?: string; message?: string } | null;
 };
+
+export type TranslationSettings = { sourceLanguage: string; targetLanguage: string };
+
+export function getTranslationSettings(): Promise<TranslationSettings> {
+  return invoke("get_translation_settings");
+}
+
+export async function setTranslationSettings(settings: TranslationSettings): Promise<void> {
+  await invoke("set_translation_settings", { settings });
+  window.dispatchEvent(new Event("llr-translation-settings"));
+}
+
+export function refreshModelCatalog(): Promise<WorkerResponse> {
+  return invoke("refresh_model_catalog");
+}
 
 export function modelStatus(): Promise<ModelStatus> {
   return invoke<ModelStatus>("model_status");
 }
 
-export function installModels(): Promise<WorkerResponse> {
-  return invoke<WorkerResponse>("install_models");
+export function installModels(pair?: string): Promise<WorkerResponse> {
+  return invoke<WorkerResponse>("install_models", { pair });
+}
+
+export function cancelModelDownload(): Promise<void> {
+  return invoke("cancel_model_download");
+}
+
+export function selectTranslationModel(pair: string): Promise<void> {
+  return invoke("select_translation_model", { pair });
 }
 
 export type TextBlock = {
@@ -407,12 +441,16 @@ export type OcrResult = {
 export type TranslationResult = {
   translatedText: string;
   translator?: string;
+  sourceLanguages?: string[];
+  targetLanguage?: string;
+  alreadyTarget?: boolean;
+  usedModels?: string[];
 };
 
 export function translateText(
   text: string,
-  sourceLanguage = "en",
-  targetLanguage = "ru",
+  sourceLanguage?: string,
+  targetLanguage?: string,
 ): Promise<WorkerResponse> {
   return invoke<WorkerResponse>("translate_text", {
     text,
@@ -464,10 +502,10 @@ export function analyzeDocumentPage(
 
 export function errorText(error: unknown): string {
   if (typeof error === "string" && error.trim()) {
-    return error;
+    return t(error);
   }
   if (error instanceof Error && error.message.trim()) {
-    return error.message;
+    return t(error.message);
   }
-  return "Не удалось выполнить операцию";
+  return t("Не удалось выполнить операцию");
 }

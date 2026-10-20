@@ -124,6 +124,7 @@ export function SelectionLayer({
                 type="button"
                 className="primary"
                 disabled={translateDisabled}
+                aria-busy={translateDisabled}
                 onClick={onTranslate}
               >
                 {translateDisabled ? <span className="notice-spinner" aria-hidden="true" /> : <Icon name="translate" />}

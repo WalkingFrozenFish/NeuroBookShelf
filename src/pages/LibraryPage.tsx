@@ -1,14 +1,17 @@
+import { locale, t } from "../i18n";
 import { DragEvent, FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { AnnotationMode, type RenderTask } from "pdfjs-dist";
 import { confirmAction } from "../confirm";
 import { Icon } from "../icons";
-import { themes } from "../theme";
+import { ModelSetup } from "../ModelSetup";
+import { modes, accents, pdfAppearances, type Appearance } from "../theme";
 import { openPdf } from "../pdfSetup";
 import {
   createShelf,
   createTag,
   clearLibrary,
   databasePath,
+  openDatabaseFolder,
   deleteDocumentNotes,
   deleteDocumentTranslations,
   deleteShelf,
@@ -42,13 +45,15 @@ type LibraryData = {
 export function LibraryPage({
   onOpen,
   onOpenDictionary,
-  theme,
-  onTheme,
+  appearance,
+  onAppearance,
+  appearancePending,
 }: {
   onOpen: (id: number) => void;
   onOpenDictionary: () => void;
-  theme: string;
-  onTheme: (theme: string) => Promise<void>;
+  appearance: Appearance;
+  onAppearance: (appearance: Appearance) => Promise<void>;
+  appearancePending: boolean;
 }) {
   const [data, setData] = useState<LibraryData | null>(null);
   const [error, setError] = useState("");
@@ -103,8 +108,8 @@ export function LibraryPage({
   if (!data) {
     return (
       <section>
-        <h1>NeuroBookShelf</h1>
-        {error ? <p className="error">{error}</p> : <p>Загрузка библиотеки…</p>}
+        <h1>{t("Библиотека")}</h1>
+        {error ? <p className="error">{error}</p> : <p>{t("Загрузка библиотеки…")}</p>}
       </section>
     );
   }
@@ -145,20 +150,20 @@ export function LibraryPage({
         onClearTranslations={(id) =>
           run(async () => {
             await deleteDocumentTranslations(id);
-            setNotice("Переводы этой книги удалены");
+            setNotice(t("Переводы этой книги удалены"));
           })
         }
         onClearNotes={(id) =>
           run(async () => {
             await deleteDocumentNotes(id);
-            setNotice("Заметки этой книги удалены");
+            setNotice(t("Заметки этой книги удалены"));
           })
         }
         onExport={(id) =>
           run(async () => {
             const exported = await exportPdf(id);
             if (exported) {
-              setNotice(`PDF экспортирован в ${exported}`);
+              setNotice(t("PDF экспортирован в {0}", [exported]));
             }
           })
         }
@@ -167,7 +172,7 @@ export function LibraryPage({
         onCreateShelf={(name) => run(() => createShelf(name).then(() => undefined))}
         onUpdateShelf={(id, name) => run(() => updateShelf(id, name).then(() => undefined))}
         onDeleteShelf={async (id, name) => {
-          if (await confirmAction(`Удалить полку «${name}»? Книги останутся в библиотеке.`)) {
+          if (await confirmAction(t("Удалить полку «{0}»? Книги останутся в библиотеке.", [name]))) {
             if (openShelf === id) {
               setOpenShelf("all");
             }
@@ -178,26 +183,21 @@ export function LibraryPage({
         onCreateTag={(name) => run(() => createTag(name).then(() => undefined))}
         onUpdateTag={(id, name) => run(() => updateTag(id, name).then(() => undefined))}
         onDeleteTag={async (id, name) => {
-          if (await confirmAction(`Удалить тег «${name}»? Связи с документами будут сняты.`)) {
+          if (await confirmAction(t("Удалить тег «{0}»? Связи с документами будут сняты.", [name]))) {
             return run(() => deleteTag(id));
           }
           return Promise.resolve(false);
         }}
         databasePath={data.path}
-        theme={theme}
-        onTheme={async (next) => {
-          setError("");
-          try {
-            await onTheme(next);
-          } catch (themeError: unknown) {
-            setError(errorText(themeError));
-          }
-        }}
+        onOpenDatabaseFolder={() => run(openDatabaseFolder)}
+        appearance={appearance}
+        onAppearance={onAppearance}
+        appearancePending={appearancePending}
         onRelocate={() =>
           run(async () => {
             const path = await relocateDatabase();
             if (path) {
-              setNotice(`База скопирована в ${path}`);
+              setNotice(t("База скопирована в {0}", [path]));
             }
           })
         }
@@ -207,7 +207,7 @@ export function LibraryPage({
         onSeed={async () => {
           if (
             !(await confirmAction(
-              "Добавить примеры в библиотеку? Появятся книги с короткими PDF, полки, теги, слова и две книги в корзине.",
+              t("Добавить примеры в библиотеку? Появятся книги с короткими PDF, полки, теги, слова и две книги в корзине."),
             ))
           ) {
             return false;
@@ -252,8 +252,10 @@ function DocumentsSection({
   onUpdateTag,
   onDeleteTag,
   databasePath,
-  theme,
-  onTheme,
+  onOpenDatabaseFolder,
+  appearance,
+  onAppearance,
+  appearancePending,
   onRelocate,
   onResetShelves,
   onResetTags,
@@ -289,8 +291,10 @@ function DocumentsSection({
   onUpdateTag: (id: number, name: string) => Promise<boolean>;
   onDeleteTag: (id: number, name: string) => Promise<boolean>;
   databasePath: string;
-  theme: string;
-  onTheme: (theme: string) => Promise<void>;
+  onOpenDatabaseFolder: () => Promise<boolean>;
+  appearance: Appearance;
+  onAppearance: (appearance: Appearance) => Promise<void>;
+  appearancePending: boolean;
   onRelocate: () => Promise<boolean>;
   onResetShelves: () => Promise<boolean>;
   onResetTags: () => Promise<boolean>;
@@ -317,7 +321,7 @@ function DocumentsSection({
 
   const visible = documents.filter((document) => matchesShelf(document, openShelf, query, tagFilter));
   const shelfName =
-    openShelf === "all" ? "Все книги" : openShelf === "loose" ? "Без полки" : shelves.find((shelf) => shelf.id === openShelf)?.name ?? "Полка";
+    openShelf === "all" ? t("Все книги") : openShelf === "loose" ? t("Без полки") : shelves.find((shelf) => shelf.id === openShelf)?.name ?? t("Полка");
   const settingsBook = settingsId === null ? null : documents.find((document) => document.id === settingsId) ?? null;
 
   function chooseShelf(shelf: ShelfView) {
@@ -354,35 +358,13 @@ function DocumentsSection({
 
   return (
     <>
-      <header className="library-toolbar">
-        <div className="library-title">
-          <h1>NeuroBookShelf</h1>
-          <span className="path-pin" aria-hidden="true">
-            <Icon name="path" />
-          </span>
-          <p className="path-pop">{databasePath}</p>
-        </div>
-        <label className="library-search">
-          <span className="sr-only">Поиск</span>
-          <input
-            type="search"
-            value={query}
-            placeholder="Поиск"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <button type="button" className="primary" disabled={pending} onClick={() => void onImport()}>
-          <Icon name="import" />
-          Импорт PDF
-        </button>
-      </header>
       {error ? <p className="error">{error}</p> : null}
       {notice ? <p className="notice">{notice}</p> : null}
       <div
         className="library-workspace"
         style={{ "--shelf-column": `${shelfWidth}px` } as React.CSSProperties}
       >
-        <aside className="shelf-column" aria-label="Полки">
+        <aside className="shelf-column" aria-label={t("Полки")}>
           <div className="shelf-frame">
           <div className="shelf-scroll">
           <ul className="mini-list">
@@ -392,7 +374,7 @@ function DocumentsSection({
                 className={!settingsOpen && openShelf === "all" ? "mini-row active" : "mini-row"}
                 onClick={() => chooseShelf("all")}
               >
-                <span>Все книги</span>
+                <span>{t("Все книги")}</span>
                 <span className="count">{documents.length}</span>
               </button>
             </li>
@@ -402,7 +384,7 @@ function DocumentsSection({
                 className={!settingsOpen && openShelf === "loose" ? "mini-row active" : "mini-row"}
                 onClick={() => chooseShelf("loose")}
               >
-                <span>Без полки</span>
+                <span>{t("Без полки")}</span>
                 <span className="count">{documents.filter((document) => document.shelfIds.length === 0).length}</span>
               </button>
             </li>
@@ -415,12 +397,11 @@ function DocumentsSection({
               onClick={() => setShelvesOpen((open) => !open)}
             >
               <Icon name="down" />
-              Полки
-            </button>
+              {t("Полки")}</button>
             <button
               type="button"
               className="icon-button"
-              aria-label="Новая полка"
+              aria-label={t("Новая полка")}
               disabled={pending}
               onClick={() => setDialog({ kind: "create-shelf" })}
             >
@@ -429,7 +410,7 @@ function DocumentsSection({
           </div>
           {shelvesOpen ? (
             <>
-              {shelves.length === 0 ? <p className="meta">Полок пока нет.</p> : null}
+              {shelves.length === 0 ? <p className="meta">{t("Полок пока нет.")}</p> : null}
               <ul className="mini-list">
                 {shelves.map((shelf) => (
                   <li key={shelf.id}>
@@ -453,7 +434,7 @@ function DocumentsSection({
                           <button
                             type="button"
                             className="icon-button shelf-more"
-                            aria-label={`Действия: ${shelf.name}`}
+                            aria-label={t("Действия: {0}", [shelf.name])}
                             disabled={pending}
                             onClick={() => setDialog({ kind: "shelf", id: shelf.id, name: shelf.name })}
                           >
@@ -475,12 +456,11 @@ function DocumentsSection({
               onClick={() => setTagsOpen((open) => !open)}
             >
               <Icon name="down" />
-              Теги
-            </button>
+              {t("Теги")}</button>
             <button
               type="button"
               className="icon-button"
-              aria-label="Новый тег"
+              aria-label={t("Новый тег")}
               disabled={pending}
               onClick={() => setDialog({ kind: "create-tag" })}
             >
@@ -489,7 +469,7 @@ function DocumentsSection({
           </div>
           {tagsOpen ? (
             <>
-              {tags.length === 0 ? <p className="meta">Тегов пока нет.</p> : null}
+              {tags.length === 0 ? <p className="meta">{t("Тегов пока нет.")}</p> : null}
               <div className="tag-cloud">
                 {tags.map((tag) => (
                   <span
@@ -507,7 +487,7 @@ function DocumentsSection({
                     <button
                       type="button"
                       className="tag-more"
-                      aria-label={`Действия: ${tag.name}`}
+                      aria-label={t("Действия: {0}", [tag.name])}
                       disabled={pending}
                       onClick={() => setDialog({ kind: "tag", id: tag.id, name: tag.name })}
                     >
@@ -545,18 +525,17 @@ function DocumentsSection({
             onClick={() => setSettingsOpen(true)}
           >
             <Icon name="settings" />
-            Настройки
-          </button>
+            {t("Настройки")}</button>
           </div>
           <div
             className="shelf-resize"
             role="separator"
             aria-orientation="vertical"
-            aria-label="Ширина меню"
+            aria-label={t("Ширина меню")}
             aria-valuemin={SHELF_MIN}
             aria-valuemax={SHELF_MAX}
             aria-valuenow={shelfWidth}
-            title="Потяните, чтобы изменить ширину"
+            title={t("Потяните, чтобы изменить ширину")}
             onPointerDown={onShelfResizeStart}
           >
             ⋮
@@ -566,66 +545,94 @@ function DocumentsSection({
           {settingsOpen ? (
             <>
             <section className="settings-screen">
-              <h2>Настройки</h2>
+              <h1>{t("Настройки")}</h1>
+              <ModelSetup />
               <section className="settings-block">
-                <h3>База</h3>
+                <h3>{t("Хранение библиотеки")}</h3>
+                <p className="meta">{t("Файл базы с каталогом книг, заметками и переводами")}</p>
                 <p className="settings-path" title={databasePath}>
                   {databasePath}
                 </p>
-                <button type="button" disabled={pending} onClick={() => void onRelocate()}>
-                  Сменить путь
-                </button>
-                <p className="meta">Файл базы копируется в выбранное место. Прежняя копия остаётся.</p>
+                <div className="actions">
+                  <button type="button" disabled={pending} onClick={() => void onOpenDatabaseFolder()}>
+                    {t("Открыть папку")}</button>
+                  <button type="button" disabled={pending} onClick={() => void onRelocate()}>
+                    {t("Перенести базу…")}</button>
+                </div>
+                <p className="meta">{t("База копируется в выбранное место, и приложение использует новую копию. Прежняя копия остаётся. PDF-файлы не перемещаются.")}</p>
               </section>
               <section className="settings-block">
-                <h3>Тема</h3>
-                <div className="theme-choices">
-                  {themes.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={theme === item.id ? "theme-choice active" : "theme-choice"}
-                      aria-pressed={theme === item.id}
-                      onClick={() => void onTheme(item.id)}
+                <h3>{t("Оформление")}</h3>
+                <label className="interface-language-control">{t("Язык интерфейса")}<select aria-label={t("Язык интерфейса")} value={appearance.language ?? "ru"} disabled={appearancePending}
+                    onChange={(event) => void onAppearance({ ...appearance, language: event.target.value as "ru" | "en" })}>
+                    <option value="ru">{t("Русский")}</option><option value="en">English</option>
+                  </select>
+                </label>
+                <p className="meta">{t("Режим")}</p>
+                <div className="theme-choices" role="group" aria-label={t("Режим интерфейса")}>
+                  {modes.map((item) => (
+                    <button key={item.id} type="button"
+                      className={appearance.mode === item.id ? "theme-choice active" : "theme-choice"}
+                      aria-pressed={appearance.mode === item.id} disabled={appearancePending}
+                      onClick={() => void onAppearance({ ...appearance, mode: item.id })}
                     >
-                      <span className={`theme-swatch theme-${item.id}`} />
-                      {item.label}
+                      <span className={`theme-swatch mode-${item.id}`} />{t(item.label)}
+                    </button>
+                  ))}
+                </div>
+                <CustomAccent appearance={appearance} pending={appearancePending} onChange={onAppearance} />
+                <p className="meta">{t("Из выбранного цвета берётся основной оттенок. Яркость подстраивается под светлый и тёмный режимы.")}</p>
+                <p className="meta">{t("Цветовая гамма")}</p>
+                <div className="theme-choices" role="group" aria-label={t("Цветовая гамма")}>
+                  {accents.map((item) => (
+                    <button key={item.id} type="button"
+                      className={appearance.accent === item.id ? "theme-choice active" : "theme-choice"}
+                      aria-pressed={appearance.accent === item.id} disabled={appearancePending}
+                      onClick={() => void onAppearance({ ...appearance, accent: item.id })}
+                    >
+                      <span className="theme-swatch accent-swatch" style={{ "--swatch-hue": item.hue } as React.CSSProperties} />{t(item.label)}
                     </button>
                   ))}
                 </div>
               </section>
               <section className="settings-block">
-                <h3>Примеры</h3>
+                <h3>{t("Страницы PDF")}</h3>
+                <div className="theme-choices" role="group" aria-label={t("Отображение PDF")}>
+                  {pdfAppearances.map((item) => (
+                    <button key={item.id} type="button"
+                      className={appearance.pdf === item.id ? "theme-choice active" : "theme-choice"}
+                      aria-pressed={appearance.pdf === item.id} disabled={appearancePending}
+                      onClick={() => void onAppearance({ ...appearance, pdf: item.id })}
+                    >{t(item.label)}</button>
+                  ))}
+                </div>
+                <p className="meta">{t("Приглушённый режим снижает яркость. Ночной затемняет белый фон, в том числе в сканах, но меняет цвета иллюстраций. Режим можно переключить в читалке. Исходный PDF не изменяется.")}</p>
+              </section>
+              <section className="settings-block">
+                <h3>{t("Примеры")}</h3>
                 <p className="meta">
-                  Книги с короткими PDF, полки, теги, слова словаря и две книги в корзине. Повторное
-                  нажатие добавит только то, чего ещё нет.
-                </p>
+                  {t("Книги с короткими PDF, полки, теги, слова словаря и две книги в корзине. Повторное нажатие добавит только то, чего ещё нет.")}</p>
                 <button type="button" disabled={pending} onClick={() => void onSeed()}>
-                  Добавить примеры
-                </button>
+                  {t("Добавить примеры")}</button>
               </section>
               <section className="settings-block">
-                <h3>Сброс полок</h3>
-                <p className="meta">Будут удалены все полки. Книги и теги останутся.</p>
+                <h3>{t("Сброс полок")}</h3>
+                <p className="meta">{t("Будут удалены все полки. Книги и теги останутся.")}</p>
                 <button type="button" disabled={pending} onClick={() => setConfirmKind("shelves")}>
-                  Сбросить полки
-                </button>
+                  {t("Сбросить полки")}</button>
               </section>
               <section className="settings-block">
-                <h3>Сброс тегов</h3>
-                <p className="meta">Будут удалены все теги. Книги и полки останутся.</p>
+                <h3>{t("Сброс тегов")}</h3>
+                <p className="meta">{t("Будут удалены все теги. Книги и полки останутся.")}</p>
                 <button type="button" disabled={pending} onClick={() => setConfirmKind("tags")}>
-                  Сбросить теги
-                </button>
+                  {t("Сбросить теги")}</button>
               </section>
               <section className="settings-block">
-                <h3>Очистить библиотеку</h3>
+                <h3>{t("Очистить библиотеку")}</h3>
                 <p className="meta">
-                  Книги исчезнут из библиотеки навсегда, восстановить их будет нельзя. Файлы на компьютере не удаляются.
-                </p>
+                  {t("Книги исчезнут из библиотеки навсегда, восстановить их будет нельзя. Файлы на компьютере не удаляются.")}</p>
                 <button type="button" className="danger" disabled={pending} onClick={() => setConfirmKind("library")}>
-                  Очистить библиотеку
-                </button>
+                  {t("Очистить библиотеку")}</button>
               </section>
             </section>
             {confirmKind ? (
@@ -649,10 +656,24 @@ function DocumentsSection({
             </>
           ) : (
             <>
-          <div className="section-heading">
-            <h2>{shelfName}</h2>
-            <p className="meta">{visible.length}</p>
-          </div>
+          <header className="library-toolbar">
+            <div className="library-title">
+              <h1>{shelfName}</h1>
+              <span className="count" aria-label={t("Книг: {0}", [visible.length])}>{visible.length}</span>
+            </div>
+            <label className="library-search">
+              <span className="sr-only">{t("Поиск книг на выбранной полке")}</span>
+              <input
+                type="search"
+                value={query}
+                placeholder={t("Поиск книг")}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <button type="button" className="primary" disabled={pending} onClick={() => void onImport()}>
+              <Icon name="import" />
+              {t("Импорт PDF")}</button>
+          </header>
           <ul className="book-grid">
           <li className="dictionary-tile" data-dictionary-card="">
             <button type="button" className="book-cover dictionary-open" onClick={onOpenDictionary}>
@@ -660,13 +681,12 @@ function DocumentsSection({
                 <span className="dictionary-cover-kicker">EN · RU</span>
                 <span className="dictionary-cover-mark">Aa</span>
               </span>
-              <strong className="book-name">Словарь</strong>
+              <strong className="book-name">{t("Словарь")}</strong>
             </button>
-            <p className="dictionary-tile-note">Слова из книг</p>
+            <p className="dictionary-tile-note">{t("Слова из книг")}</p>
             <button type="button" className="book-read primary" onClick={onOpenDictionary}>
               <Icon name="dictionary" />
-              Открыть
-            </button>
+              {t("Открыть")}</button>
           </li>
           {visible.map((document) => (
             <li
@@ -679,7 +699,7 @@ function DocumentsSection({
               }}
             >
               <div className="book-cover">
-                {document.path ? <BookCover documentId={document.id} /> : <span className="cover-fallback">Нет PDF</span>}
+                {document.path ? <BookCover documentId={document.id} /> : <span className="cover-fallback">{t("Нет PDF")}</span>}
                 <strong className="book-name" title={document.title}>
                   {document.title}
                 </strong>
@@ -687,15 +707,15 @@ function DocumentsSection({
               <button
                 type="button"
                 className="book-menu"
-                aria-label={`Настройки: ${document.title}`}
+                aria-label={t("Настройки: {0}", [document.title])}
                 disabled={pending}
                 onClick={() => setSettingsId(document.id)}
               >
                 ⋮
               </button>
               <div className="book-meta">
-                <LinkPreview label="Полки" items={shelves} ids={document.shelfIds} colorful={false} />
-                <LinkPreview label="Теги" items={tags} ids={document.tagIds} colorful />
+                <LinkPreview label={t("Полки")} items={shelves} ids={document.shelfIds} colorful={false} />
+                <LinkPreview label={t("Теги")} items={tags} ids={document.tagIds} colorful />
               </div>
               <button
                 type="button"
@@ -704,15 +724,14 @@ function DocumentsSection({
                 onClick={() => onOpen(document.id)}
               >
                 <Icon name="read" />
-                Читать
-              </button>
+                {t("Читать")}</button>
             </li>
           ))}
         </ul>
           {documents.length === 0 ? (
-            <p>Документов пока нет.</p>
+            <p>{t("Документов пока нет.")}</p>
           ) : visible.length === 0 ? (
-            <p>Ничего не найдено.</p>
+            <p>{t("Ничего не найдено.")}</p>
           ) : null}
             </>
           )}
@@ -729,19 +748,19 @@ function DocumentsSection({
           onSetLinks={(shelfIds, tagIds) => onUpdate(settingsBook.id, settingsBook.title, shelfIds, tagIds)}
           onExport={() => onExport(settingsBook.id)}
           onTrash={async () => {
-            if (await confirmAction(`Переместить «${settingsBook.title}» в корзину? Файл не будет удалён с диска.`)) {
+            if (await confirmAction(t("Переместить «{0}» в корзину? Файл не будет удалён с диска.", [settingsBook.title]))) {
               return onTrash(settingsBook.id);
             }
             return Promise.resolve(false);
           }}
           onClearTranslations={async () => {
-            if (await confirmAction(`Удалить все переводы в «${settingsBook.title}»? Закладки и заметки останутся.`)) {
+            if (await confirmAction(t("Удалить все переводы в «{0}»? Закладки и заметки останутся.", [settingsBook.title]))) {
               return onClearTranslations(settingsBook.id);
             }
             return false;
           }}
           onClearNotes={async () => {
-            if (await confirmAction(`Удалить все заметки в «${settingsBook.title}»? Переводы и закладки останутся.`)) {
+            if (await confirmAction(t("Удалить все заметки в «{0}»? Переводы и закладки останутся.", [settingsBook.title]))) {
               return onClearNotes(settingsBook.id);
             }
             return false;
@@ -766,23 +785,23 @@ function ConfirmResetDialog({
   const copy =
     kind === "shelves"
       ? {
-          title: "Сбросить полки",
-          text: "Все полки будут удалены. Книги и теги останутся.",
-          question: "Точно сбросить все полки?",
-          confirm: "Да, сбросить",
+          title: t("Сбросить полки"),
+          text: t("Все полки будут удалены. Книги и теги останутся."),
+          question: t("Точно сбросить все полки?"),
+          confirm: t("Да, сбросить"),
         }
       : kind === "tags"
         ? {
-            title: "Сбросить теги",
-            text: "Все теги будут удалены. Книги и полки останутся.",
-            question: "Точно сбросить все теги?",
-            confirm: "Да, сбросить",
+            title: t("Сбросить теги"),
+            text: t("Все теги будут удалены. Книги и полки останутся."),
+            question: t("Точно сбросить все теги?"),
+            confirm: t("Да, сбросить"),
           }
         : {
-            title: "Очистить библиотеку",
-            text: "Книги будут удалены из библиотеки навсегда, восстановить их будет нельзя. Файлы на компьютере останутся.",
-            question: "Точно удалить все книги?",
-            confirm: "Да, удалить",
+            title: t("Очистить библиотеку"),
+            text: t("Книги будут удалены из библиотеки навсегда, восстановить их будет нельзя. Файлы на компьютере останутся."),
+            question: t("Точно удалить все книги?"),
+            confirm: t("Да, удалить"),
           };
 
   useEffect(() => {
@@ -809,8 +828,7 @@ function ConfirmResetDialog({
         <p>{copy.question}</p>
         <div className="actions">
           <button type="button" autoFocus disabled={pending} onClick={onClose}>
-            Нет, оставить
-          </button>
+            {t("Нет, оставить")}</button>
           <button type="button" className="danger" disabled={pending} onClick={() => void onConfirm()}>
             {copy.confirm}
           </button>
@@ -852,12 +870,12 @@ function ListDialog({
   const nameLength = Array.from(name.trim()).length;
   const title =
     dialog.kind === "create-shelf"
-      ? "Новая полка"
+      ? t("Новая полка")
       : dialog.kind === "create-tag"
-        ? "Новый тег"
+        ? t("Новый тег")
         : dialog.kind === "shelf"
-          ? "Полка"
-          : "Тег";
+          ? t("Полка")
+          : t("Тег");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -895,10 +913,9 @@ function ListDialog({
         onSubmit={(event) => void submit(event)}
       >
         <h2>{title}</h2>
-        {dialog.kind === "shelf" ? <p className="meta">Книги останутся в библиотеке.</p> : null}
+        {dialog.kind === "shelf" ? <p className="meta">{t("Книги останутся в библиотеке.")}</p> : null}
         <label>
-          Название
-          <input
+          {t("Название")}<input
             value={name}
             maxLength={NAME_LIMIT}
             onChange={(event) => setName(Array.from(event.target.value).slice(0, NAME_LIMIT).join(""))}
@@ -906,18 +923,16 @@ function ListDialog({
             autoFocus
           />
         </label>
-        {nameLength > NAME_LIMIT ? <p className="meta">Не больше 30 символов.</p> : null}
+        {nameLength > NAME_LIMIT ? <p className="meta">{t("Не больше 30 символов.")}</p> : null}
         <div className="actions">
           <button type="submit" className="primary" disabled={pending || name.trim() === "" || nameLength > NAME_LIMIT}>
-            {creating ? "Создать" : "Сохранить"}
+            {creating ? t("Создать") : t("Сохранить")}
           </button>
           <button type="button" disabled={pending} onClick={onClose}>
-            Отмена
-          </button>
+            {t("Отмена")}</button>
           {creating ? null : (
             <button type="button" className="danger" disabled={pending} onClick={() => void remove()}>
-              Удалить
-            </button>
+              {t("Удалить")}</button>
           )}
         </div>
       </form>
@@ -1066,7 +1081,7 @@ function LinkPreview({
     <div className="tag-fade preview">
       <span className="link-fade-name">{label}</span>
       <div className="tag-fade-track">
-        {linked.length === 0 ? <span className="meta">нет</span> : null}
+        {linked.length === 0 ? <span className="meta">{t("нет")}</span> : null}
         {linked.map((item) =>
           colorful ? (
             <span key={item.id} className={`tag-chip tone-${item.id % 6}`}>
@@ -1137,18 +1152,18 @@ function BookSettings({
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="modal book-settings" onMouseDown={(event) => event.stopPropagation()}>
-        <button type="button" className="settings-close" aria-label="Закрыть" onClick={onClose}>
+        <button type="button" className="settings-close" aria-label={t("Закрыть")} onClick={onClose}>
           <Icon name="clear" />
         </button>
         <div className="settings-line">
-          <span className="settings-kicker">Название документа</span>
+          <span className="settings-kicker">{t("Название документа")}</span>
           <span className="settings-plain" title={document.originalFilename ?? undefined}>
-            {document.originalFilename ?? "Без файла"}
+            {document.originalFilename ?? t("Без файла")}
             {document.originalFilename ? <span className="meta"> {formatSize(document.fileSize)}</span> : null}
           </span>
         </div>
         <div className="settings-line">
-          <span className="settings-kicker">Название</span>
+          <span className="settings-kicker">{t("Название")}</span>
           {editingTitle ? (
             <div className="title-editor">
               <input
@@ -1173,11 +1188,9 @@ function BookSettings({
                 disabled={pending || title.trim() === "" || title.trim() === document.title}
                 onClick={() => void saveTitle()}
               >
-                Сохранить
-              </button>
+                {t("Сохранить")}</button>
               <button type="button" disabled={pending} onClick={resetTitle}>
-                Сбросить
-              </button>
+                {t("Сбросить")}</button>
             </div>
           ) : (
             <>
@@ -1185,7 +1198,7 @@ function BookSettings({
               <button
                 type="button"
                 className="icon-button"
-                aria-label="Изменить название"
+                aria-label={t("Изменить название")}
                 disabled={pending}
                 onClick={() => {
                   setTitle(document.title);
@@ -1197,9 +1210,9 @@ function BookSettings({
             </>
           )}
         </div>
-        <h3>Полки</h3>
+        <h3>{t("Полки")}</h3>
         {shelves.length === 0 ? (
-          <p className="meta">Полок пока нет.</p>
+          <p className="meta">{t("Полок пока нет.")}</p>
         ) : (
           <ChoiceSplit
             items={shelves}
@@ -1209,9 +1222,9 @@ function BookSettings({
             onToggle={(id) => void onSetLinks(toggleId(document.shelfIds, id), document.tagIds)}
           />
         )}
-        <h3>Теги</h3>
+        <h3>{t("Теги")}</h3>
         {tags.length === 0 ? (
-          <p className="meta">Тегов пока нет.</p>
+          <p className="meta">{t("Тегов пока нет.")}</p>
         ) : (
           <ChoiceSplit
             items={tags}
@@ -1224,33 +1237,29 @@ function BookSettings({
         <div className="book-settings-actions">
           {document.path ? (
             <section className="settings-block">
-              <h3>Экспорт</h3>
-              <p className="meta">Сохранить PDF этой книги в выбранное место.</p>
+              <h3>{t("Экспорт")}</h3>
+              <p className="meta">{t("Сохранить PDF этой книги в выбранное место.")}</p>
               <button type="button" disabled={pending} onClick={() => void onExport()}>
-                Экспорт
-              </button>
+                {t("Экспорт")}</button>
             </section>
           ) : null}
           <section className="settings-block">
-            <h3>Переводы</h3>
-            <p className="meta">Будут удалены все переводы этой книги. Закладки и заметки останутся.</p>
+            <h3>{t("Переводы")}</h3>
+            <p className="meta">{t("Будут удалены все переводы этой книги. Закладки и заметки останутся.")}</p>
             <button type="button" className="danger" disabled={pending} onClick={() => void onClearTranslations()}>
-              Удалить переводы
-            </button>
+              {t("Удалить переводы")}</button>
           </section>
           <section className="settings-block">
-            <h3>Заметки</h3>
-            <p className="meta">Будут удалены все заметки этой книги. Переводы и закладки останутся.</p>
+            <h3>{t("Заметки")}</h3>
+            <p className="meta">{t("Будут удалены все заметки этой книги. Переводы и закладки останутся.")}</p>
             <button type="button" className="danger" disabled={pending} onClick={() => void onClearNotes()}>
-              Удалить заметки
-            </button>
+              {t("Удалить заметки")}</button>
           </section>
           <section className="settings-block">
-            <h3>Корзина</h3>
-            <p className="meta">Книга исчезнет из библиотеки. Файл на компьютере не удаляется.</p>
+            <h3>{t("Корзина")}</h3>
+            <p className="meta">{t("Книга исчезнет из библиотеки. Файл на компьютере не удаляется.")}</p>
             <button type="button" className="danger" disabled={pending} onClick={() => void onTrash()}>
-              В корзину
-            </button>
+              {t("В корзину")}</button>
           </section>
         </div>
       </div>
@@ -1324,15 +1333,28 @@ function matchesShelf(
 
 function formatSize(size: number | null): string {
   if (size === null) {
-    return "неизвестен";
+    return t("неизвестен");
   }
   const megabytes = size / (1024 * 1024);
   if (megabytes > 0 && megabytes < 0.01) {
-    return "< 0,01 МБ";
+    return t("< 0,01 МБ");
   }
   const digits = megabytes >= 10 ? 1 : 2;
-  return `${megabytes.toLocaleString("ru-RU", {
+  return t("{0} МБ", [megabytes.toLocaleString(locale(), {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
-  })} МБ`;
+  })]);
+}
+
+function CustomAccent({ appearance, pending, onChange }: {
+  appearance: Appearance; pending: boolean; onChange: (value: Appearance) => Promise<void>;
+}) {
+  const [color, setColor] = useState(appearance.customColor ?? "#3875c7");
+  useEffect(() => { setColor(appearance.customColor ?? "#3875c7"); }, [appearance.customColor]);
+  return <div className="custom-color-control">
+    <label>{t("Свой цвет")} <input type="color" aria-label={t("Свой цвет")} value={color} onChange={(event) => setColor(event.target.value)} /></label>
+    <code>{color}</code>
+    <button type="button" disabled={pending || (appearance.accent === "custom" && color === appearance.customColor)}
+      onClick={() => void onChange({ ...appearance, accent: "custom", customColor: color })}>{t("Применить цвет")}</button>
+  </div>;
 }

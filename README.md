@@ -1,91 +1,99 @@
 # NeuroBookShelf
 
-Локальная PDF-библиотека с OCR и переводом с английского на русский. Храните книги на полках, ищите по тексту, оставляйте заметки и переводите страницы без облачных сервисов.
+**English** · [Русский](README.ru.md)
+
+An offline PDF library with local OCR and translation. Organize books on shelves, find text, keep notes and translate pages without uploading your documents to a cloud service.
 
 [![Release](https://img.shields.io/github/v/release/WalkingFrozenFish/NeuroBookShelf)](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest)
 [![Desktop CI](https://github.com/WalkingFrozenFish/NeuroBookShelf/actions/workflows/desktop.yml/badge.svg?branch=master)](https://github.com/WalkingFrozenFish/NeuroBookShelf/actions/workflows/desktop.yml)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPLv3-blue.svg)](LICENSE)
 
-**[Скачать приложение](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest)** · [Установка](DISTRIBUTION.md) · [Сообщить об ошибке](https://github.com/WalkingFrozenFish/NeuroBookShelf/issues/new/choose) · [История версий](CHANGELOG.md)
+**[Download the latest release](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest)** · [Report a bug or suggest a feature](https://github.com/WalkingFrozenFish/NeuroBookShelf/issues/new/choose) · [Changelog](CHANGELOG.md)
 
-## Установка
+![NeuroBookShelf reader with a sample PDF](site/assets/reader-en.png)
 
-| Платформа | Файл в Release | Как запустить |
+## What you can do
+
+- **Organize:** import PDFs, use shelves and tags, search your catalog, export PDFs, trash and restore books.
+- **Read:** thumbnails, PDF outline, zoom, saved reading position, text selection and copying, and in-book search with Ctrl+F.
+- **Remember:** bookmarks, document and page notes, a book dictionary and a shared dictionary.
+- **Translate locally:** translate a selected region or a page using the PDF text layer or local OCR. Review editable translation cards and saved versions.
+- **Keep reading:** queue a page range for background translation, track progress, cancel and retry errors while navigating the app.
+- **Take it with you:** the Windows portable edition keeps the library, runtime and models in its folder.
+
+### Coming in the next release
+
+The development version adds a Russian/English interface switch, a custom accent color picker, downloadable **English ↔ Russian** and **French ↔ English** translation models, automatic model routing, source/target selection and download cancellation. These changes are not yet included in the published **0.1.0** installer.
+
+The stable 0.1.0 release translates **English → Russian**. OCR currently supports **English** in both versions. Other translation languages use the PDF's text layer; multilingual scan recognition is not included.
+
+## Install
+
+| Platform | Release asset | How to run |
 | --- | --- | --- |
-| Windows x64 | `*-setup.exe` | Открыть установщик |
-| Windows x64 portable | `*-windows-x64-portable.zip` | Распаковать и открыть `NeuroBookShelf.exe` |
-| macOS Apple Silicon, M1 и новее | `*_aarch64.dmg` | Перенести приложение в Applications |
+| Windows x64 | `*-setup.exe` | Run the installer |
+| Windows x64 portable | `*-windows-x64-portable.zip` | Extract and open `NeuroBookShelf.exe` |
+| macOS Apple Silicon (M1 or newer) | `*_aarch64.dmg` | Drag the app to Applications |
 
-Python и библиотеки уже включены. Git, Node.js, Rust и ручная установка пакетов пользователю не нужны. Windows-установщик при необходимости скачает WebView2.
+Python and required libraries are included. End users do not need Git, Node.js, Rust or a separate Python installation. The Windows installer downloads WebView2 if necessary.
 
-При первом запуске откройте **«Модели»** и загрузите около 199 МиБ для OCR и перевода. Загрузку можно пропустить и сразу читать PDF. После установки моделей чтение, распознавание и перевод работают локально без сети. PDF не отправляются в облако.
+You can read PDFs immediately. Download about **199 MiB** of OCR and English → Russian models when needed. In the development version, open **Settings → Models**, choose source and target languages and download the required pairs from the table. The app chooses installed models for each fragment. Once models are installed, reading, OCR and translation work offline. Your PDFs are not uploaded.
 
-Windows-сборка пока без сертификата издателя, а macOS использует тестовую ad-hoc подпись без нотарификации: система может предупреждать или блокировать первый запуск. Intel Mac и готовые Linux-пакеты пока не поддерживаются. Подробности — в [инструкции по установке](DISTRIBUTION.md).
+Windows builds currently have no publisher certificate. macOS uses an ad-hoc signature without notarization. Your system may warn or block the first launch. Intel Macs and ready to use Linux packages are not supported yet. See [installation details](DISTRIBUTION.en.md).
 
-## Возможности
+## Appearance and languages
 
-- **Библиотека:** импорт PDF с сохранением копии, полки, теги, поиск, экспорт, корзина и восстановление.
-- **Читалка:** миниатюры, масштаб, запоминание позиции, оглавление PDF, выделение и копирование текста, поиск по книге через Ctrl+F.
-- **Заметки:** закладки и заметки документа или страницы, словарь книги и общий словарь.
-- **Перевод:** выделенная область или целая страница, текстовый слой PDF или локальный OCR, версии перевода и редактируемые карточки поверх страницы.
-- **Фоновая очередь:** перевод диапазона страниц, прогресс, отмена и повтор ошибок; очередь продолжает работать при переходах между книгами.
-- **Переносимость:** portable хранит библиотеку и модели рядом с приложением; всю папку можно перенести на другой компьютер.
+In the development version, **Settings → Appearance** offers Russian/English interface language, light/dark modes, preset palettes and a custom color picker. The chosen color supplies the primary hue; the app adjusts brightness for each mode. Interface language and translation model are independent preferences.
 
-Поддерживается перевод **English → Russian**, OCR настроен на английский. Словарь служит ручной шпаргалкой и не изменяет результат модели.
+PDF appearance has separate **Original**, **Dimmed** and **Night** modes. Night mode also darkens white regions in scans and changes illustration colors. The original PDF and exported copies remain unchanged.
 
-## Данные и приватность
+## Your data
 
-Обычная установка хранит PDF, SQLite и модели в каталоге данных приложения:
+The regular installation stores PDFs, SQLite and models in the application data folder:
 
 - Windows: `%APPDATA%/com.locallibrary.reader/`.
 - macOS: `~/Library/Application Support/com.locallibrary.reader/`.
-- Windows portable: `user-data/` рядом с EXE.
+- Windows portable: `user-data/` next to the EXE.
 
-Импорт копирует документ и не меняет оригинал. Обновление приложения сохраняет каталог библиотеки. Для резервной копии закройте приложение и скопируйте весь каталог данных. Для переноса portable копируйте всю распакованную папку, включая `runtime/`, `portable.flag` и `user-data/`.
+Import stores a copy and leaves the original intact. Updates retain the library directory. To back up, close the app and copy the entire data directory. To move the portable edition, copy the entire extracted folder, including `runtime/`, `portable.flag` and `user-data/`.
 
-## Ограничения
+## Current limitations
 
-Проект находится на ранней стадии, текущая ветка версий — 0.x.
+This is an early **0.x** project.
 
-- Читаются только PDF. EPUB, MOBI и комиксы пока не поддерживаются.
-- Поиск и выделение используют существующий текстовый слой; OCR-индексации сканов пока нет.
-- Фоновая очередь не восстанавливается после закрытия приложения. Сохранённые переводы остаются; повторная постановка пропускает готовые области.
-- Качество OCR и перевода зависит от документа. Сложная вёрстка, таблицы, несколько колонок и некачественные сканы могут обрабатываться неточно.
-- Страница с частичным текстовым слоем не дополняется OCR автоматически. Словарь не передаётся переводчику.
+- PDF only; EPUB, MOBI and comics are not supported.
+- Search and selection use an existing text layer. Scans are not OCR indexed for library search.
+- Background queues do not survive an app restart. Saved translations remain; repeated jobs skip translated regions.
+- OCR and translation may be inaccurate on complex layouts, tables, multiple columns or low quality scans.
+- Partial text layers are not automatically supplemented with OCR. Dictionary entries do not customize the translation model.
 
-## Разработка
+## Development
 
-Стек: React 19, TypeScript, Vite, Tauri 2 / Rust, SQLite, PDF.js и Python worker с PyMuPDF, PaddleOCR, CTranslate2 и SentencePiece.
+React, TypeScript, Vite, Tauri/Rust, SQLite, PDF.js and a Python worker with PyMuPDF, PaddleOCR, CTranslate2 and SentencePiece.
 
-Для сборки нужны Node.js 22, Rust stable, системные зависимости Tauri и development Python 3.10–3.12. Пошаговая настройка — в [SETUP.md](SETUP.md).
+Building requires Node.js 22, stable Rust, Tauri system dependencies and development Python 3.10–3.12. Packaged builds include their own Python. See [setup instructions (Russian)](SETUP.md).
 
-```bash
+```sh
 git clone https://github.com/WalkingFrozenFish/NeuroBookShelf.git
 cd NeuroBookShelf
 npm ci
 npm run tauri dev
 ```
 
-Рабочий процесс: **ветка → PR → зелёный CI → squash merge → проверка основной ветки**. Публичный Release запускается отдельно тегом версии. Основная ветка — `master`, workflow также поддерживает `main`.
+Run `npm test`, `npm run build`, Python unit tests and Rust library tests before submitting a change. The workflow is **branch → PR → passing CI → squash merge**. The default branch is `master`; workflows also support `main`. Public releases are created separately by version tags.
 
-Инструкции для изменений и проверок: [CONTRIBUTING.md](CONTRIBUTING.md). Детали веток, CI и релизов: [docs/WORKFLOW.md](docs/WORKFLOW.md).
+The bilingual GitHub Pages landing source is in [`site/`](site/); [publishing instructions](docs/LANDING.md) explain enabling Pages. It has no framework or external scripts.
 
-## Документация
+## Contributing and support
 
-| Документ | Содержание |
-| --- | --- |
-| [DISTRIBUTION.md](DISTRIBUTION.md) | Установка, portable, модели, сборка и подпись |
-| [SETUP.md](SETUP.md) | Окружение разработчика и запуск |
-| [OVERVIEW.md](OVERVIEW.md) | Карта экранов и поток запроса до базы |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Техническое устройство |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Изменения, PR и проверки |
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | Ветки, merge, CI и выпуск версии |
-| [CHANGELOG.md](CHANGELOG.md) | История изменений |
-| [ROADMAP.md](ROADMAP.md) | Направления развития |
-| [SUPPORT.md](SUPPORT.md) / [SECURITY.md](SECURITY.md) | Помощь и сообщения об уязвимостях |
+Use [GitHub Issues](https://github.com/WalkingFrozenFish/NeuroBookShelf/issues/new/choose) for bugs, ideas and questions. English and Russian are welcome. Describe what you expected, what happened, your platform and app version. Do not attach private PDFs or personal data to public reports.
 
-## Лицензия
+[Contributing](CONTRIBUTING.en.md) · [Support](SUPPORT.en.md) · [Security](SECURITY.en.md) · [Architecture](ARCHITECTURE.md) · [Roadmap](ROADMAP.md) · [Release workflow](docs/WORKFLOW.md)
 
-Исходники NeuroBookShelf распространяются под [GNU AGPL v3](LICENSE), SPDX: `AGPL-3.0-only`. Использование, изменения и распространение разрешены на условиях этой лицензии; при распространении сохраняйте уведомления и предоставляйте соответствующие исходники. Гарантии не предоставляются.
+Maintained by [@WalkingFrozenFish](https://github.com/WalkingFrozenFish). Internal architecture, roadmap and build workflow documentation are currently in Russian.
 
-Библиотеки, Python и модели сохраняют собственные лицензии. Источники и уведомления перечислены в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), а сборка включает доступные тексты лицензий и инвентарь зависимостей в `runtime/licenses/`.
+## License
+
+NeuroBookShelf source is licensed under [GNU AGPL v3](LICENSE), SPDX: `AGPL-3.0-only`. When distributing it, retain notices and provide corresponding source under the license terms. No warranty is provided.
+
+Libraries, Python and model files retain their own licenses. See [third-party notices](THIRD_PARTY_NOTICES.md). Packaged builds include available license texts and a dependency inventory under `runtime/licenses/`.

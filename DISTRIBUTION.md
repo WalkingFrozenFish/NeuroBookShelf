@@ -1,5 +1,7 @@
 # Установка и выпуск NeuroBookShelf
 
+[English](DISTRIBUTION.en.md) · **Русский**
+
 ## Для пользователя
 
 На странице [GitHub Releases](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest) (блок Releases справа на главной странице репозитория) выбирайте файл под свою систему:

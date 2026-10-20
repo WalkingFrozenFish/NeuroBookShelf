@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { PointerEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../icons";
 import {
@@ -296,8 +297,8 @@ export function TranslationOverlay({
                       type="button"
                       className="icon-button"
                       data-popup-collapse
-                      aria-label="Свернуть"
-                      title="Свернуть"
+                      aria-label={t("Свернуть")}
+                      title={t("Свернуть")}
                       onClick={() => {
                         setOpenIds((current) => current.filter((id) => id !== block.id));
                         onCollapse(block.id);
@@ -321,10 +322,10 @@ export function TranslationOverlay({
                   onClick={() => addToDictionary(block)}
                 >
                   {savedIds.includes(block.id)
-                    ? "В словаре"
+                    ? t("В словаре")
                     : savingIds.includes(block.id)
-                      ? "Добавление…"
-                      : "Добавить в словарь"}
+                      ? t("Добавление…")
+                      : t("Добавить в словарь")}
                 </button>
                 {RESIZE_EDGES.map((edge) => (
                   <span key={edge} data-popup-resize={edge} aria-hidden="true" />
@@ -336,11 +337,11 @@ export function TranslationOverlay({
                 className="translation-popup-icon"
                 data-popup-icon
                 data-popup-drag
-                aria-label="Развернуть перевод"
-                title="Развернуть перевод"
+                aria-label={t("Развернуть перевод")}
+                title={t("Развернуть перевод")}
               >
                 <Icon name="translate" />
-                <span className="sr-only">Развернуть перевод</span>
+                <span className="sr-only">{t("Развернуть перевод")}</span>
               </button>
             )}
           </article>

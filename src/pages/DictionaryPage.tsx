@@ -1,3 +1,4 @@
+import { locale, t } from "../i18n";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../icons";
 import {
@@ -128,15 +129,16 @@ function matchesLetter(word: DictionaryWord, letter: string, script: Script): bo
 }
 
 function wordsLabel(count: number): string {
+  if (locale() === "en-US") return t(count === 1 ? "{0} слово" : "{0} слов", [count]);
   const mod10 = count % 10;
   const mod100 = count % 100;
   if (mod10 === 1 && mod100 !== 11) {
-    return `${count} слово`;
+    return t("{0} слово", [count]);
   }
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return `${count} слова`;
+    return t("{0} слова", [count]);
   }
-  return `${count} слов`;
+  return t("{0} слов", [count]);
 }
 
 export function DictionaryPage({ onBack }: { onBack: () => void }) {
@@ -289,31 +291,29 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
     setLetter((current) => (current === next ? null : next));
   }
 
-  const heading = needle ? "Поиск" : letter === OTHER ? "Остальные" : letter;
+  const heading = needle ? t("Поиск") : letter === OTHER ? t("Остальные") : letter;
 
   return (
     <section className="lexicon">
       <button type="button" className="lexicon-back" onClick={onBack}>
         <Icon name="back" />
-        Библиотека
-      </button>
+        {t("Библиотека")}</button>
       <header className="lexicon-head">
         <div className="lexicon-title">
-          <h1>Словарь</h1>
+          <h1>{t("Словарь")}</h1>
           <button type="button" className="primary" onClick={() => setEditor({ key: null, side: script })}>
             <Icon name="plus" />
-            Добавить
-          </button>
+            {t("Добавить")}</button>
         </div>
       </header>
       <div className="lexicon-tools">
         <label className="lexicon-search">
-          <span className="sr-only">Поиск по английскому и русскому</span>
+          <span className="sr-only">{t("Поиск по английскому и русскому")}</span>
           <input
             ref={searchRef}
             type="search"
             value={query}
-            placeholder="Поиск по английскому или русскому"
+            placeholder={t("Поиск по английскому или русскому")}
             spellCheck={false}
             onChange={(event) => {
               const next = event.target.value;
@@ -324,7 +324,7 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
             }}
           />
         </label>
-        <div className="lexicon-script" role="tablist" aria-label="Алфавит">
+        <div className="lexicon-script" role="tablist" aria-label={t("Алфавит")}>
           <button
             type="button"
             role="tab"
@@ -341,13 +341,12 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
             className={script === "ru" ? "active" : undefined}
             onClick={() => chooseScript("ru")}
           >
-            Русский
-          </button>
+            {t("Русский")}</button>
         </div>
         <nav
           ref={lettersRef}
           className="lexicon-letters"
-          aria-label={script === "en" ? "Английские буквы" : "Русские буквы"}
+          aria-label={script === "en" ? t("Английские буквы") : t("Русские буквы")}
         >
           {letters.map((item) => {
             const count = words.filter((word) => matchesLetter(word, item, script)).length;
@@ -358,7 +357,7 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
                 type="button"
                 data-lexicon-letter={item}
                 aria-current={active ? "page" : undefined}
-                aria-label={item === OTHER ? "Остальные" : `Буква ${item}`}
+                aria-label={item === OTHER ? t("Остальные") : t("Буква {0}", [item])}
                 disabled={count === 0}
                 className={active ? "active" : undefined}
                 onClick={() => chooseLetter(item)}
@@ -371,21 +370,21 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
       </div>
       <div className="lexicon-results" ref={resultsRef} aria-live="polite">
         {error ? <p className="error">{error}</p> : null}
-        {entries === null && !error ? <p>Загрузка словаря…</p> : null}
+        {entries === null && !error ? <p>{t("Загрузка словаря…")}</p> : null}
         {entries && words.length === 0 ? (
           <div className="lexicon-placeholder">
-            <p>В словаре пока нет слов.</p>
-            <p>Добавьте слово кнопкой выше или сохраните его из перевода в книге.</p>
+            <p>{t("В словаре пока нет слов.")}</p>
+            <p>{t("Добавьте слово кнопкой выше или сохраните его из перевода в книге.")}</p>
           </div>
         ) : null}
         {entries && words.length > 0 && !needle && !letter ? (
           <div className="lexicon-placeholder">
-            <p>Выберите букву, чтобы открыть слова на неё.</p>
+            <p>{t("Выберите букву, чтобы открыть слова на неё.")}</p>
           </div>
         ) : null}
         {entries && words.length > 0 && (needle || letter) && shown.length === 0 ? (
           <div className="lexicon-placeholder">
-            <p>Ничего не нашлось.</p>
+            <p>{t("Ничего не нашлось.")}</p>
           </div>
         ) : null}
         {shown.length > 0 && heading ? (
@@ -403,12 +402,12 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
                     !shown.every((word) => selected.has(dictionaryForm(word.word)))
                   }
                   disabled={removing}
-                  label="Выбрать все"
+                  label={t("Выбрать все")}
                   onChange={toggleVisible}
                 />
-                <span>Выбрать все</span>
+                <span>{t("Выбрать все")}</span>
               </label>
-              {selected.size > 0 ? <span className="meta">Выбрано: {selected.size}</span> : null}
+              {selected.size > 0 ? <span className="meta">{t("Выбрано:")}{" "}{selected.size}</span> : null}
               {selected.size > 0 ? (
                 <button
                   type="button"
@@ -417,8 +416,7 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
                   onClick={() => setConfirmDelete(true)}
                 >
                   <Icon name="trash" />
-                  Удалить
-                </button>
+                  {t("Удалить")}</button>
               ) : null}
             </div>
             <ol className="lexicon-list">
@@ -432,7 +430,7 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
                         type="checkbox"
                         checked={selected.has(key)}
                         disabled={removing}
-                        aria-label={`Выбрать ${word.word}`}
+                        aria-label={t("Выбрать {0}", [word.word])}
                         onChange={() => toggleWord(key)}
                       />
                     </label>
@@ -440,7 +438,7 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
                     <button
                       type="button"
                       className="icon-button lexicon-edit"
-                      aria-label={`Изменить ${word.word}`}
+                      aria-label={t("Изменить {0}", [word.word])}
                       onClick={() => setEditor({ key: word.word.toLocaleLowerCase(), side: script })}
                     >
                       <Icon name="edit" />
@@ -492,19 +490,17 @@ export function DictionaryPage({ onBack }: { onBack: () => void }) {
             aria-labelledby="lexicon-delete-title"
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <h2 id="lexicon-delete-title">Удалить слова</h2>
+            <h2 id="lexicon-delete-title">{t("Удалить слова")}</h2>
             <p>
               {selected.size === 1
-                ? "Выбранное слово исчезнет из словаря."
-                : `Выбранные слова (${selected.size}) исчезнут из словаря.`}
+                ? t("Выбранное слово исчезнет из словаря.")
+                : t("Выбранные слова ({0}) исчезнут из словаря.", [selected.size])}
             </p>
             <div className="lexicon-modal-actions">
               <button type="button" disabled={removing} onClick={() => setConfirmDelete(false)}>
-                Отмена
-              </button>
+                {t("Отмена")}</button>
               <button type="button" className="danger" disabled={removing} onClick={() => void removeSelected()}>
-                Удалить
-              </button>
+                {t("Удалить")}</button>
             </div>
           </div>
         </div>
@@ -637,7 +633,7 @@ function WordModal({
     const deletions = originIds.current.filter((id) => !kept.has(id) && entries.some((entry) => entry.id === id));
     if (updates.length === 0 && creates.length === 0 && deletions.length === 0) {
       if (editingKey === null) {
-        setError("Такие переводы уже есть у этого слова.");
+        setError(t("Такие переводы уже есть у этого слова."));
         return;
       }
       onSaved(entries, word);
@@ -688,9 +684,9 @@ function WordModal({
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => void submit(event)}
       >
-        <h2 id="lexicon-add-title">{editingKey === null ? "Новое слово" : "Изменить слово"}</h2>
+        <h2 id="lexicon-add-title">{editingKey === null ? t("Новое слово") : t("Изменить слово")}</h2>
         <label>
-          {side === "en" ? "Английское слово" : "Русское слово"}
+          {side === "en" ? t("Английское слово") : t("Русское слово")}
           <input
             ref={sourceRef}
             value={source}
@@ -702,7 +698,7 @@ function WordModal({
           />
         </label>
         <div className="lexicon-translations">
-          <span className="lexicon-field-label">{side === "en" ? "Русские переводы" : "Английские слова"}</span>
+          <span className="lexicon-field-label">{side === "en" ? t("Русские переводы") : t("Английские слова")}</span>
           {rows.map((row, index) => (
             <div className="lexicon-translation-row" key={index}>
               <input
@@ -710,15 +706,15 @@ function WordModal({
                 autoComplete="off"
                 spellCheck={false}
                 disabled={pending}
-                aria-label={`Перевод ${index + 1}`}
-                placeholder={index === 0 ? (side === "en" ? "привет" : "hello") : "ещё вариант"}
+                aria-label={t("Перевод {0}", [index + 1])}
+                placeholder={index === 0 ? (side === "en" ? "привет" : "hello") : t("ещё вариант")}
                 onChange={(event) => updateRow(index, event.target.value)}
               />
               {rows.length > 1 ? (
                 <button
                   type="button"
                   className="icon-button"
-                  aria-label={`Убрать перевод ${index + 1}`}
+                  aria-label={t("Убрать перевод {0}", [index + 1])}
                   disabled={pending}
                   onClick={() => removeRow(index)}
                 >
@@ -735,19 +731,17 @@ function WordModal({
               onClick={() => setRows((current) => [...current, { entryId: null, text: "" }])}
             >
               <Icon name="plus" />
-              Ещё перевод
-            </button>
+              {t("Ещё перевод")}</button>
           ) : null}
         </div>
-        {known.length > 0 ? <p className="meta">Уже есть: {known.join(", ")}</p> : null}
+        {known.length > 0 ? <p className="meta">{t("Уже есть:")}{" "}{known.join(", ")}</p> : null}
         {error ? <p className="error">{error}</p> : null}
         <div className="lexicon-modal-actions">
           <button type="submit" className="primary" disabled={pending || !ready}>
-            {editingKey === null ? "Добавить" : "Сохранить"}
+            {editingKey === null ? t("Добавить") : t("Сохранить")}
           </button>
           <button type="button" disabled={pending} onClick={onClose}>
-            Отмена
-          </button>
+            {t("Отмена")}</button>
         </div>
       </form>
     </div>

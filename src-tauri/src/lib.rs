@@ -17,6 +17,19 @@ use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 
 const THEMES: &[&str] = &["light", "dark", "sage", "rose", "mist"];
+const ACCENTS: &[&str] = &["blue", "teal", "green", "violet", "rose", "amber", "custom"];
+const PDF_APPEARANCES: &[&str] = &["original", "dimmed", "night"];
+
+#[derive(Serialize, Deserialize)]
+struct Appearance {
+    #[serde(default)]
+    language: Option<String>,
+    mode: String,
+    accent: String,
+    #[serde(default, rename = "customColor")]
+    custom_color: Option<String>,
+    pdf: String,
+}
 
 struct AppDb {
     conn: Mutex<rusqlite::Connection>,
@@ -32,8 +45,20 @@ struct AppDb {
 struct StoredSettings {
     #[serde(default)]
     database_path: Option<String>,
+    #[serde(default)]
+    language: Option<String>,
     #[serde(default = "default_theme")]
     theme: String,
+    #[serde(default)]
+    accent: Option<String>,
+    #[serde(default)]
+    custom_color: Option<String>,
+    #[serde(default = "default_pdf_appearance")]
+    pdf_appearance: String,
+}
+
+fn default_pdf_appearance() -> String {
+    "original".to_string()
 }
 
 fn default_theme() -> String {
@@ -44,7 +69,11 @@ impl Default for StoredSettings {
     fn default() -> Self {
         Self {
             database_path: None,
+            language: None,
             theme: default_theme(),
+            accent: None,
+            custom_color: None,
+            pdf_appearance: default_pdf_appearance(),
         }
     }
 }
@@ -69,17 +98,108 @@ fn database_path(db: State<AppDb>) -> String {
 }
 
 #[tauri::command]
-fn get_theme(db: State<AppDb>) -> String {
-    valid_theme(&read_settings(&db.settings_path).theme)
+fn open_database_folder(db: State<AppDb>) -> Result<(), String> {
+    let path = db
+        .path
+        .lock()
+        .map_err(|_| "Не удалось обратиться к базе".to_string())?
+        .clone();
+    let folder = path
+        .parent()
+        .ok_or_else(|| "Не удалось определить папку базы".to_string())?;
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        use std::os::windows::process::CommandExt;
+        let mut command = std::process::Command::new("explorer.exe");
+        command.creation_flags(0x08000000);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut command = std::process::Command::new("xdg-open");
+
+    command
+        .arg(folder)
+        .spawn()
+        .map_err(|err| format!("Не удалось открыть папку базы: {err}"))?;
+    Ok(())
 }
 
 #[tauri::command]
-fn set_theme(db: State<AppDb>, theme: String) -> Result<(), String> {
-    let theme = theme.trim();
-    if !THEMES.contains(&theme) {
-        return Err("Неизвестная тема".to_string());
+fn get_appearance(db: State<AppDb>) -> Appearance {
+    appearance_from_settings(&read_settings(&db.settings_path))
+}
+
+#[tauri::command]
+fn set_appearance(db: State<AppDb>, appearance: Appearance) -> Result<(), String> {
+    if !["light", "dark"].contains(&appearance.mode.as_str())
+        || !ACCENTS.contains(&appearance.accent.as_str())
+        || appearance
+            .language
+            .as_ref()
+            .is_some_and(|lang| !["ru", "en"].contains(&lang.as_str()))
+        || appearance
+            .custom_color
+            .as_ref()
+            .is_some_and(|color| !valid_color(color))
+        || !PDF_APPEARANCES.contains(&appearance.pdf.as_str())
+    {
+        return Err("Неизвестные параметры оформления".to_string());
     }
-    update_settings(&db, |settings| settings.theme = theme.to_string())
+    update_settings(&db, |settings| {
+        settings.language = appearance.language;
+        settings.theme = appearance.mode;
+        settings.accent = Some(appearance.accent);
+        settings.custom_color = appearance.custom_color;
+        settings.pdf_appearance = appearance.pdf;
+    })
+}
+
+fn valid_color(color: &str) -> bool {
+    color.len() == 7 && color.starts_with('#') && color[1..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn appearance_from_settings(settings: &StoredSettings) -> Appearance {
+    let legacy_accent = match settings.theme.as_str() {
+        "sage" => "green",
+        "rose" => "rose",
+        "mist" => "teal",
+        _ => "blue",
+    };
+    Appearance {
+        language: Some(
+            settings
+                .language
+                .as_deref()
+                .filter(|lang| ["ru", "en"].contains(lang))
+                .unwrap_or("ru")
+                .to_string(),
+        ),
+        custom_color: settings
+            .custom_color
+            .as_ref()
+            .filter(|color| valid_color(color))
+            .cloned(),
+        mode: if settings.theme == "dark" {
+            "dark"
+        } else {
+            "light"
+        }
+        .to_string(),
+        accent: settings
+            .accent
+            .as_deref()
+            .filter(|accent| ACCENTS.contains(accent))
+            .unwrap_or(legacy_accent)
+            .to_string(),
+        pdf: if PDF_APPEARANCES.contains(&settings.pdf_appearance.as_str()) {
+            settings.pdf_appearance.clone()
+        } else {
+            default_pdf_appearance()
+        },
+    }
 }
 
 #[tauri::command]
@@ -289,15 +409,16 @@ async fn ocr_document_page(
 #[tauri::command]
 async fn translate_text(
     text: String,
-    source_language: String,
-    target_language: String,
+    source_language: Option<String>,
+    target_language: Option<String>,
 ) -> Result<worker::WorkerResponse, String> {
+    let settings = models::get_translation_settings();
     worker_call(
         "translate",
         Some(serde_json::json!({
             "text": text,
-            "sourceLanguage": source_language,
-            "targetLanguage": target_language,
+            "sourceLanguage": source_language.unwrap_or(settings.source_language),
+            "targetLanguage": target_language.unwrap_or(settings.target_language),
         })),
     )
     .await
@@ -526,12 +647,13 @@ async fn retranslate_translation_block(
     id: i64,
 ) -> Result<TranslationBlock, String> {
     let ocr_text = with_conn(db.clone(), |conn| db::translation_block_ocr(conn, id))?;
+    let settings = models::get_translation_settings();
     let response = worker_call(
         "translate",
         Some(serde_json::json!({
             "text": ocr_text,
-            "sourceLanguage": "en",
-            "targetLanguage": "ru",
+            "sourceLanguage": settings.source_language,
+            "targetLanguage": settings.target_language,
         })),
     )
     .await?;
@@ -690,7 +812,10 @@ fn portable_directory() -> Option<PathBuf> {
     }
     let executable = std::env::current_exe().ok()?;
     let directory = executable.parent()?;
-    directory.join("portable.flag").is_file().then(|| directory.to_path_buf())
+    directory
+        .join("portable.flag")
+        .is_file()
+        .then(|| directory.to_path_buf())
 }
 
 fn data_root(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -786,6 +911,84 @@ fn same_file(left: &Path, right: &Path) -> bool {
     left == right
 }
 
+#[cfg(test)]
+mod appearance_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_themes_migrate_without_losing_their_color() {
+        for (theme, mode, accent) in [
+            ("light", "light", "blue"),
+            ("dark", "dark", "blue"),
+            ("sage", "light", "green"),
+            ("rose", "light", "rose"),
+            ("mist", "light", "teal"),
+        ] {
+            let settings: StoredSettings = serde_json::from_value(serde_json::json!({
+                "theme": theme, "databasePath": "example.db"
+            }))
+            .unwrap();
+            let appearance = appearance_from_settings(&settings);
+            assert_eq!(appearance.mode, mode);
+            assert_eq!(appearance.accent, accent);
+            assert_eq!(appearance.pdf, "original");
+            assert_eq!(settings.database_path.as_deref(), Some("example.db"));
+        }
+    }
+
+    #[test]
+    fn appearance_round_trips_with_database_settings() {
+        for accent in ACCENTS {
+            for pdf in PDF_APPEARANCES {
+                let settings = StoredSettings {
+                    theme: "dark".to_string(),
+                    accent: Some(accent.to_string()),
+                    pdf_appearance: pdf.to_string(),
+                    ..StoredSettings::default()
+                };
+                let saved = serde_json::to_string(&settings).unwrap();
+                let restored = appearance_from_settings(&serde_json::from_str(&saved).unwrap());
+                assert_eq!(restored.mode, "dark");
+                assert_eq!(restored.accent, *accent);
+                assert_eq!(restored.pdf, *pdf);
+            }
+        }
+    }
+
+    #[test]
+    fn custom_color_and_language_survive_settings_round_trip() {
+        let settings = StoredSettings {
+            theme: "dark".into(),
+            accent: Some("custom".into()),
+            custom_color: Some("#ea681e".into()),
+            language: Some("en".into()),
+            ..StoredSettings::default()
+        };
+        let saved = serde_json::to_string(&settings).unwrap();
+        let restored = appearance_from_settings(&serde_json::from_str(&saved).unwrap());
+        assert_eq!(restored.language.as_deref(), Some("en"));
+        assert_eq!(restored.custom_color.as_deref(), Some("#ea681e"));
+        assert_eq!(restored.accent, "custom");
+        assert!(valid_color("#12ABef"));
+        assert!(!valid_color("#12xyef"));
+        assert!(!valid_color("red"));
+    }
+
+    #[test]
+    fn invalid_appearance_fields_fall_back_independently() {
+        let settings = StoredSettings {
+            theme: "dark".to_string(),
+            accent: Some("unknown".to_string()),
+            pdf_appearance: "unknown".to_string(),
+            ..StoredSettings::default()
+        };
+        let appearance = appearance_from_settings(&settings);
+        assert_eq!(appearance.mode, "dark");
+        assert_eq!(appearance.accent, "blue");
+        assert_eq!(appearance.pdf, "original");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -801,10 +1004,16 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             models::model_status,
+            models::refresh_model_catalog,
+            models::get_translation_settings,
+            models::set_translation_settings,
             models::install_models,
+            models::cancel_model_download,
+            models::select_translation_model,
             database_path,
-            get_theme,
-            set_theme,
+            open_database_folder,
+            get_appearance,
+            set_appearance,
             relocate_database,
             reset_shelves,
             reset_tags,

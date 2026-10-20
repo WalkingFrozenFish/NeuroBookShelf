@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { confirmAction } from "../confirm";
 import { Icon } from "../icons";
@@ -25,10 +26,12 @@ import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils";
 import type { TextMatch } from "../pdfText";
 import { translationQueue } from "../translationQueue";
 import { scrollWithinPanel } from "../scrollWithinPanel";
+import { pdfAppearances, type Appearance } from "../theme";
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
 const THUMB_MIN = 148;
+const THUMB_DEFAULT = THUMB_MIN + 30;
 const THUMB_MAX = THUMB_MIN + 200;
 const SIDE_MIN = 300;
 const SIDE_MAX = SIDE_MIN + 200;
@@ -48,10 +51,13 @@ type Zoom = {
 
 type Props = {
   documentId: number | null;
+  appearance: Appearance;
+  onAppearance: (appearance: Appearance) => Promise<void>;
+  appearancePending: boolean;
   registerLeaveGuard?: (guard: () => boolean | Promise<boolean>) => void;
 };
 
-export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
+export function ReaderPage({ documentId, registerLeaveGuard, appearance, onAppearance, appearancePending }: Props) {
   const [title, setTitle] = useState("");
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -71,13 +77,12 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
   const [dictionaryRequest, setDictionaryRequest] = useState(0);
   const [overlay, setOverlay] = useState(false);
   const [soloPopup, setSoloPopup] = useState<number | null>(null);
-  const [thumbWidth, setThumbWidth] = useState(THUMB_MIN);
+  const [thumbWidth, setThumbWidth] = useState(THUMB_DEFAULT);
   const [sideWidth, setSideWidth] = useState(SIDE_MAX);
-  const [thumbPaintWidth, setThumbPaintWidth] = useState(THUMB_MIN);
+  const [thumbPaintWidth, setThumbPaintWidth] = useState(THUMB_DEFAULT);
   const [pagesOpen, setPagesOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchMatch, setSearchMatch] = useState<TextMatch | null>(null);
-  const [searchRequest, setSearchRequest] = useState(0);
   const translationRevision = useSyncExternalStore(translationQueue.subscribe, translationQueue.getRevision);
   const openNavigation = useCallback(() => setPagesOpen(true), []);
   const [narrowLayout, setNarrowLayout] = useState(() => window.matchMedia("(max-width: 980px)").matches);
@@ -137,7 +142,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
     }
     if (
       pageDirtyRef.current &&
-      !(await confirmAction("Есть несохранённый текст заметки этой страницы. Перейти без сохранения?"))
+      !(await confirmAction(t("Есть несохранённый текст заметки этой страницы. Перейти без сохранения?")))
     ) {
       return false;
     }
@@ -202,16 +207,15 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
     setPagesOpen(false);
     setSearchQuery("");
     setSearchMatch(null);
-    setSearchRequest(0);
 
     async function open() {
       try {
         const record = await loadDocument(documentId!);
         if (record.deletedAt) {
-          throw new Error("Документ находится в корзине");
+          throw new Error(t("Документ находится в корзине"));
         }
         if (!record.path) {
-          throw new Error("У документа нет PDF");
+          throw new Error(t("У документа нет PDF"));
         }
         const payload = await readDocumentPdf(documentId!);
         if (cancelled) {
@@ -332,7 +336,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
       if (!anyDirtyRef.current) {
         return true;
       }
-      return confirmAction("Есть несохранённый текст заметки. Уйти без сохранения?");
+      return confirmAction(t("Есть несохранённый текст заметки. Уйти без сохранения?"));
     });
     return () => registerLeaveGuard(() => true);
   }, [registerLeaveGuard]);
@@ -352,8 +356,8 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
   if (documentId === null) {
     return (
       <section className="opening-state">
-        <h1>Читалка</h1>
-        <p>Документ не открыт. Откройте PDF из библиотеки.</p>
+        <h1>{t("Читалка")}</h1>
+        <p>{t("Документ не открыт. Откройте PDF из библиотеки.")}</p>
       </section>
     );
   }
@@ -361,7 +365,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
   if (error && !pdf) {
     return (
       <section className="empty-state">
-        <h1>Читалка</h1>
+        <h1>{t("Читалка")}</h1>
         <p className="error">{error}</p>
       </section>
     );
@@ -370,8 +374,8 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
   if (!pdf || loading) {
     return (
       <section className="opening-state">
-        <h1>Читалка</h1>
-        <p>Открытие документа…</p>
+        <h1>{t("Читалка")}</h1>
+        <p>{t("Открытие документа…")}</p>
       </section>
     );
   }
@@ -390,14 +394,26 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
         <strong className="book-name reader-title" title={title}>
           {title}
         </strong>
-        <div className="reader-tools" role="toolbar" aria-label="Инструменты страницы">
-          <button type="button" className="icon-only" aria-label="Поиск по книге" title="Поиск по книге (Ctrl+F)" onClick={() => setSearchRequest((value) => value + 1)}><Icon name="search" /></button>
-          <button type="button" className={overlay ? "icon-only active" : "icon-only"} aria-label="Показать переводы" title="Показать / скрыть переводы" aria-pressed={overlay} onClick={() => { setOverlay(!overlay); setSoloPopup(null); }}><Icon name="overlay" /></button>
+        <div className="reader-tools" role="toolbar" aria-label={t("Инструменты страницы")}>
+          <span className="pdf-appearance-control">
+          <select
+            className="pdf-appearance-select"
+            aria-label={t("Отображение PDF")}
+            title={t("Цвета страницы PDF")}
+            value={appearance.pdf}
+            disabled={appearancePending}
+            onChange={(event) => void onAppearance({ ...appearance, pdf: event.target.value as Appearance["pdf"] })}
+          >
+            {pdfAppearances.map((item) => <option key={item.id} value={item.id}>{t(item.label)}</option>)}
+          </select>
+          <Icon name="down" />
+          </span>
+          <button type="button" className={overlay ? "icon-only active" : "icon-only"} aria-label={t("Показать переводы")} title={t("Показать / скрыть переводы")} aria-pressed={overlay} onClick={() => { setOverlay(!overlay); setSoloPopup(null); }}><Icon name="overlay" /></button>
           <button
             type="button"
             className={selectionMode ? "icon-only active" : "icon-only"}
-            aria-label="Выделить область"
-            title="Выделить область"
+            aria-label={t("Выделить область")}
+            title={t("Выделить область")}
             aria-pressed={selectionMode}
             onClick={() =>
               setSelectionMode((current) => {
@@ -420,17 +436,17 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
       </header>
       <aside
         className={pagesOpen ? "thumbs is-open" : "thumbs"}
-        aria-label="Страницы"
+        aria-label={t("Страницы")}
         aria-hidden={narrowLayout && !pagesOpen ? true : undefined}
         inert={narrowLayout && !pagesOpen ? true : undefined}
       >
         <div className="thumbs-head">
-          <strong>Страницы</strong>
-          <button type="button" className="thumbs-close" aria-label="Закрыть карту страниц" onClick={() => setPagesOpen(false)}>
+          <strong>{t("Страницы")}</strong>
+          <button type="button" className="thumbs-close" aria-label={t("Закрыть карту страниц")} onClick={() => setPagesOpen(false)}>
             <Icon name="clear" />
           </button>
         </div>
-        <PdfNavigation pdf={pdf} pageNumber={pageNumber} onOpenPage={goToPage} onMatch={setSearchMatch} onQueryChange={setSearchQuery} onOpenPanel={openNavigation} searchRequest={searchRequest}>
+        <PdfNavigation pdf={pdf} pageNumber={pageNumber} onOpenPage={goToPage} onMatch={setSearchMatch} onQueryChange={setSearchQuery} onOpenPanel={openNavigation}>
         {Array.from({ length: pageCount }, (_, index) => {
           const number = index + 1;
           return (
@@ -450,11 +466,11 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           className="thumbs-resize"
           role="separator"
           aria-orientation="vertical"
-          aria-label="Ширина превью"
+          aria-label={t("Ширина превью")}
           aria-valuemin={THUMB_MIN}
           aria-valuemax={THUMB_MAX}
           aria-valuenow={thumbWidth}
-          title="Потяните, чтобы изменить ширину"
+          title={t("Потяните, чтобы изменить ширину")}
           onPointerDown={(event) => onColumnResizeStart(event, thumbWidth, THUMB_MIN, THUMB_MAX, 1, setThumbWidth)}
         >
           ⋮
@@ -464,18 +480,18 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
         <button
           type="button"
           className="pages-toggle"
-          aria-label="Карта страниц"
+          aria-label={t("Карта страниц")}
           aria-expanded={pagesOpen}
           onClick={() => setPagesOpen(true)}
         >
           <Icon name="page" />
-          <span className="sr-only">Карта страниц</span>
+          <span className="sr-only">{t("Карта страниц")}</span>
         </button>
         {pagesOpen ? (
           <button
             type="button"
             className="pages-backdrop"
-            aria-label="Закрыть карту страниц"
+            aria-label={t("Закрыть карту страниц")}
             onClick={() => setPagesOpen(false)}
           />
         ) : null}
@@ -483,7 +499,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           {error ? (
             <div className="reader-notice is-error" role="status">
               <p>{error}</p>
-              <button type="button" className="reader-notice-close" aria-label="Закрыть" onClick={() => setError("")}>
+              <button type="button" className="reader-notice-close" aria-label={t("Закрыть")} onClick={() => setError("")}>
                 <Icon name="clear" />
               </button>
             </div>
@@ -519,30 +535,30 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
             setHighlight(null);
           }}
         />
-        <div className="viewer-bar" aria-label="Просмотр страницы">
+        <div className="viewer-bar" aria-label={t("Просмотр страницы")}>
           <button
             type="button"
-            aria-label="Назад"
-            title="Предыдущая страница"
+            aria-label={t("Назад")}
+            title={t("Предыдущая страница")}
             disabled={pageNumber <= 1}
             onClick={() => goToPage(pageNumber - 1)}
           >
             <Icon name="back" />
-            <span className="sr-only">Назад</span>
+            <span className="sr-only">{t("Назад")}</span>
           </button>
           <span className="page-label">{pageLabel}</span>
           <button
             type="button"
-            aria-label="Вперёд"
-            title="Следующая страница"
+            aria-label={t("Вперёд")}
+            title={t("Следующая страница")}
             disabled={pageNumber >= pageCount}
             onClick={() => goToPage(pageNumber + 1)}
           >
             <Icon name="forward" />
-            <span className="sr-only">Вперёд</span>
+            <span className="sr-only">{t("Вперёд")}</span>
           </button>
           <span className="viewer-split" aria-hidden="true" />
-          <button type="button" aria-label="Уменьшить" title="Уменьшить" onClick={() => setZoom(stepZoom(resolvedScale, 1 / 1.25))}>
+          <button type="button" aria-label={t("Уменьшить")} title={t("Уменьшить")} onClick={() => setZoom(stepZoom(resolvedScale, 1 / 1.25))}>
             <Icon name="minus" />
             <span className="sr-only">−</span>
           </button>
@@ -551,7 +567,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
             mode={zoom.mode}
             onCommit={(value) => setZoom({ mode: "scale", value })}
           />
-          <button type="button" aria-label="Увеличить" title="Увеличить" onClick={() => setZoom(stepZoom(resolvedScale, 1.25))}>
+          <button type="button" aria-label={t("Увеличить")} title={t("Увеличить")} onClick={() => setZoom(stepZoom(resolvedScale, 1.25))}>
             <Icon name="plus" />
             <span className="sr-only">+</span>
           </button>
@@ -559,24 +575,24 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           <button
             type="button"
             className={zoom.mode === "fit-width" ? "active" : undefined}
-            aria-label="По ширине"
-            title="По ширине"
+            aria-label={t("По ширине")}
+            title={t("По ширине")}
             aria-pressed={zoom.mode === "fit-width"}
             onClick={() => setZoom({ mode: "fit-width", value: resolvedScale })}
           >
             <Icon name="width" />
-            <span className="sr-only">По ширине</span>
+            <span className="sr-only">{t("По ширине")}</span>
           </button>
           <button
             type="button"
             className={zoom.mode === "fit-page" ? "active" : undefined}
-            aria-label="Страница"
-            title="Страница целиком"
+            aria-label={t("Страница")}
+            title={t("Страница целиком")}
             aria-pressed={zoom.mode === "fit-page"}
             onClick={() => setZoom({ mode: "fit-page", value: resolvedScale })}
           >
             <Icon name="page" />
-            <span className="sr-only">Страница</span>
+            <span className="sr-only">{t("Страница")}</span>
           </button>
         </div>
       </div>
@@ -661,6 +677,15 @@ function PageView({
   const [box, setBox] = useState({ width: 0, height: 0 });
   const [pageError, setPageError] = useState("");
   const [textViewport, setTextViewport] = useState<{ pageNumber: number; viewport: PageViewport } | null>(null);
+  const [rendered, setRendered] = useState<{
+    pdf: PDFDocumentProxy;
+    pageNumber: number;
+    zoom: Zoom;
+    width: number;
+    height: number;
+  } | null>(null);
+  const isRendered = rendered?.pdf === pdf && rendered.pageNumber === pageNumber &&
+    rendered.zoom === zoom && rendered.width === box.width && rendered.height === box.height;
 
   useEffect(() => {
     const node = viewRef.current;
@@ -686,6 +711,7 @@ function PageView({
     const state = { cancelled: false, task: null as RenderTask | null };
     setPageError("");
     setTextViewport(null);
+    setRendered(null);
 
     async function draw() {
       const page = await pdf.getPage(pageNumber);
@@ -717,13 +743,16 @@ function PageView({
       if (view && zoom.mode !== "scale") {
         trimPageToView(view, canvas!, zoom.mode === "fit-page" || fitted.height <= availableHeight);
       }
-      setTextViewport({ pageNumber, viewport: page.getViewport({ scale: Number.parseFloat(canvas!.style.width) / base.width }) });
       state.task = page.render({ canvas: canvas!, viewport, annotationMode: AnnotationMode.ENABLE });
       try {
         await state.task.promise;
+        if (!state.cancelled) {
+          setTextViewport({ pageNumber, viewport: page.getViewport({ scale: Number.parseFloat(canvas!.style.width) / base.width }) });
+          setRendered({ pdf, pageNumber, zoom, width: box.width, height: box.height });
+        }
       } catch (renderError: unknown) {
         if (!state.cancelled && !isCancelledRender(renderError)) {
-          setPageError("Не удалось показать страницу");
+          setPageError(t("Не удалось показать страницу"));
         }
       } finally {
         page.cleanup();
@@ -741,8 +770,10 @@ function PageView({
     <div className="page-view" data-zoom={zoom.mode} ref={viewRef}>
       <div
         className="page-frame"
+        data-rendering={!isRendered}
+        aria-busy={!isRendered && !pageError}
         onClick={(event) => {
-          if (selectionMode) {
+          if (!isRendered || selectionMode) {
             return;
           }
           const target = event.target;
@@ -919,15 +950,15 @@ function Thumbnail({
 
 function regionLabel(phase: "idle" | "ocr" | "translating" | "saving"): string {
   if (phase === "ocr") {
-    return "Распознавание…";
+    return t("Распознавание…");
   }
   if (phase === "translating") {
-    return "Перевод…";
+    return t("Перевод…");
   }
   if (phase === "saving") {
-    return "Сохранение…";
+    return t("Сохранение…");
   }
-  return "Перевести";
+  return t("Перевести");
 }
 
 function ZoomPercent({
@@ -959,8 +990,8 @@ function ZoomPercent({
   return (
     <label className="zoom-label" data-scale={scale.toFixed(3)} data-zoom={mode}>
       <input
-        aria-label="Масштаб"
-        title="Масштаб от 25 до 400"
+        aria-label={t("Масштаб")}
+        title={t("Масштаб от 25 до 400")}
         inputMode="decimal"
         value={draft ?? String(percent)}
         onFocus={(event) => {
@@ -1110,10 +1141,10 @@ function toBytes(payload: ArrayBuffer | number[] | Uint8Array): Uint8Array {
 function readerError(error: unknown): string {
   if (error instanceof Error) {
     if (error.name === "InvalidPDFException" || error.name === "MissingPDFException") {
-      return "Не удалось открыть PDF. Файл повреждён или имеет неподдерживаемый формат.";
+      return t("Не удалось открыть PDF. Файл повреждён или имеет неподдерживаемый формат.");
     }
     if (error.name === "PasswordException") {
-      return "PDF защищён паролем. Открытие таких файлов пока недоступно.";
+      return t("PDF защищён паролем. Открытие таких файлов пока недоступно.");
     }
   }
   return errorText(error);
