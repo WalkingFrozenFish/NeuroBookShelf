@@ -8,6 +8,51 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+struct RuntimePaths {
+    script: PathBuf,
+    python: Option<PathBuf>,
+    models: PathBuf,
+    bundled: bool,
+}
+
+static RUNTIME: OnceLock<RuntimePaths> = OnceLock::new();
+
+pub fn initialize(resources: PathBuf, models: PathBuf) {
+    let runtime = resources.join("runtime");
+    let bundled = runtime.join("worker.py").is_file();
+    let python = if cfg!(windows) {
+        runtime.join("python/python.exe")
+    } else {
+        runtime.join("python/bin/python3")
+    };
+    let script = if bundled || !cfg!(debug_assertions) {
+        runtime.join("worker.py")
+    } else {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../python-worker/worker.py")
+    };
+    let _ = RUNTIME.set(RuntimePaths {
+        script,
+        python: (bundled || !cfg!(debug_assertions)).then_some(python),
+        models,
+        bundled,
+    });
+}
+
+pub fn models_root() -> PathBuf {
+    RUNTIME
+        .get()
+        .map(|paths| paths.models.clone())
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../python-worker/models")
+        })
+}
+
+pub fn runtime_available() -> bool {
+    RUNTIME
+        .get()
+        .is_some_and(|paths| paths.python.as_ref().is_some_and(|python| python.is_file()))
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkerResponse {
     pub success: bool,
@@ -43,7 +88,9 @@ pub fn call_value(command: &str, payload: Option<Value>) -> Result<WorkerRespons
     if let Some(payload) = payload {
         request.insert("payload".to_string(), payload);
     }
-    let timeout = if command == "ocr_region"
+    let timeout = if command == "install_models" {
+        Duration::from_secs(3600)
+    } else if command == "ocr_region"
         || command == "ocr_page"
         || command == "translate"
         || command == "warm_translator"
@@ -74,7 +121,12 @@ fn call_line(line: &str, timeout: Duration) -> Result<WorkerResponse, String> {
 }
 
 fn script_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../python-worker/worker.py")
+    RUNTIME
+        .get()
+        .map(|paths| paths.script.clone())
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../python-worker/worker.py")
+        })
 }
 
 struct Session {
@@ -233,6 +285,14 @@ fn close_session(session: &mut Option<Session>, reason: &str) -> String {
 }
 
 fn selected_program() -> Result<Vec<String>, String> {
+    if let Some(paths) = RUNTIME.get() {
+        if let Some(python) = &paths.python {
+            if !python.is_file() {
+                return Err("Встроенный Python не найден. Переустановите приложение.".to_string());
+            }
+            return Ok(vec![python.display().to_string()]);
+        }
+    }
     static CACHE: OnceLock<Mutex<Option<Vec<String>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(None));
     let mut cache = cache
@@ -333,9 +393,23 @@ fn spawn_worker(program: &[String], script: &PathBuf) -> Result<Child, WorkerFai
         .env("PYTHONUNBUFFERED", "1")
         .env("PYTHONIOENCODING", "utf-8")
         .env("KMP_DUPLICATE_LIB_OK", "TRUE")
+        .env("PYTHONNOUSERSITE", "1")
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(paths) = RUNTIME.get() {
+        command.env("LLR_MODEL_ROOT", &paths.models);
+        if paths.bundled {
+            command.env("LLR_BUNDLED_RUNTIME", "1");
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW, worker still uses pipes.
+    }
     command.spawn().map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             WorkerFailure::NotFound(executable.clone())

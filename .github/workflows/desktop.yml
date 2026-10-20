@@ -1,0 +1,117 @@
+name: Desktop installers
+
+on:
+  push:
+    branches: [master, 'codex/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Match release tag to application version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: python scripts/check_version.py "${GITHUB_REF_NAME}"
+
+  installers:
+    needs: checks
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+            bundles: nsis
+          - os: macos-15
+            platform: macos-arm64
+            bundles: app,dmg
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      CARGO_TERM_COLOR: always
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - run: npm ci
+      - name: Build and smoke-test private Python runtime
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: python scripts/build_runtime.py
+      - name: Database and filesystem tests (Python protocol smoke tested above)
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --skip worker::tests
+      - name: Build installers (tags also create a draft GitHub Release)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: --config src-tauri/tauri.release.conf.json --bundles ${{ matrix.bundles }}
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('NeuroBookShelf {0}', github.ref_name) || '' }}
+          releaseBody: 'Windows: setup.exe. macOS Apple Silicon: .dmg. Models are downloaded from the app on first use. See DISTRIBUTION.md for installation and signing details.'
+          releaseDraft: true
+          prerelease: false
+      - name: Package Windows portable ZIP
+        if: runner.os == 'Windows'
+        run: python scripts/package_portable.py
+      - name: Upload installers and portable archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeuroBookShelf-${{ matrix.platform }}-${{ github.sha }}
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/dmg/*.dmg
+            bundle/*-portable.zip
+      - name: Attach portable ZIP and checksums to draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/release_checksums.py "${{ matrix.platform }}"
+          gh release upload "$GITHUB_REF_NAME" bundle/SHA256SUMS-${{ matrix.platform }}.txt --clobber
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            gh release upload "$GITHUB_REF_NAME" bundle/*-portable.zip --clobber
+          fi

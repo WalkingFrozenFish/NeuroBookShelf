@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 
 type IconName =
+  | "search"
   | "library"
   | "reader"
   | "trash"
@@ -27,6 +28,7 @@ type IconName =
   | "settings";
 
 const paths: Record<IconName, ReactNode> = {
+  search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>,
   library: (
     <>
       <path d="M4 19.5V6.2A2.2 2.2 0 0 1 6.2 4H20v15.5" />

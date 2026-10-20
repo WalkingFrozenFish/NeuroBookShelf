@@ -6,6 +6,8 @@ import { LibraryPage } from "./pages/LibraryPage";
 import { ReaderPage } from "./pages/ReaderPage";
 import { TrashPage } from "./pages/TrashPage";
 import { applyTheme } from "./theme";
+import { TranslationQueuePanel } from "./TranslationQueuePanel";
+import { ModelSetup } from "./ModelSetup";
 import "./styles.css";
 
 type PageId = "library" | "reader" | "trash" | "dictionary";
@@ -92,6 +94,7 @@ function App() {
             </button>
           ))}
         </nav>
+        <ModelSetup />
       </header>
       <main
         className={
@@ -112,6 +115,7 @@ function App() {
         {page === "trash" && <TrashPage />}
         {page === "dictionary" && <DictionaryPage onBack={() => setPage("library")} />}
       </main>
+      <TranslationQueuePanel />
     </div>
   );
 }

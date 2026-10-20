@@ -64,6 +64,9 @@ def handle(message):
         return translate_text(message.get("payload"))
     if command == "warm_translator":
         return warm_translator()
+    if command == "install_models":
+        from model_manager import install_models
+        return install_models()
     return error("UNKNOWN_COMMAND", "Unknown command")
 
 
@@ -668,14 +671,31 @@ def ocr_engine():
         return _engine
     from paddleocr import PaddleOCR
 
+    options = {}
+    configured_root = os.environ.get("LLR_MODEL_ROOT", "").strip()
+    if configured_root:
+        root = Path(configured_root) / "ocr"
+        if not all((root / part / "inference.pdiparams").is_file() for part in ("det", "rec")):
+            raise FileNotFoundError("Модели OCR не установлены. Откройте «Модели» в приложении.")
+        options = {
+            "text_detection_model_name": "PP-OCRv5_mobile_det",
+            "text_detection_model_dir": str(root / "det"),
+            "text_recognition_model_name": "en_PP-OCRv5_mobile_rec",
+            "text_recognition_model_dir": str(root / "rec"),
+            "device": "cpu",
+        }
+
     try:
         _engine = PaddleOCR(
             lang="en",
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
+            **options,
         )
     except TypeError:
+        if options:
+            raise
         _engine = PaddleOCR(lang="en")
     try:
         sys.stderr.write("ocr-engine-ready\n")
@@ -798,6 +818,11 @@ def translation_model_dir():
     override = os.environ.get("LLR_TRANSLATION_MODEL", "").strip()
     if override:
         return Path(override)
+    model_root = os.environ.get("LLR_MODEL_ROOT", "").strip()
+    if model_root:
+        directory = Path(model_root) / "en-ru"
+        if (directory / "model.bin").is_file() or os.environ.get("LLR_BUNDLED_RUNTIME"):
+            return directory
     return Path(__file__).resolve().parent / "models" / "en-ru"
 
 

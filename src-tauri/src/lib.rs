@@ -1,5 +1,6 @@
 mod db;
 mod import;
+mod models;
 mod seed;
 mod storage;
 mod worker;
@@ -680,8 +681,23 @@ fn delete_tag(db: State<AppDb>, id: i64) -> Result<(), String> {
     with_conn(db, |conn| db::delete_tag(conn, id))
 }
 
+fn data_root(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Some(path) = std::env::var_os("LLR_DATA_DIR") {
+        return Ok(PathBuf::from(path));
+    }
+    if cfg!(windows) {
+        let executable = std::env::current_exe()?;
+        if let Some(directory) = executable.parent() {
+            if directory.join("portable.flag").is_file() {
+                return Ok(directory.join("user-data"));
+            }
+        }
+    }
+    Ok(app.path().app_data_dir()?)
+}
+
 fn open_database(app: &tauri::App) -> Result<AppDb, Box<dyn std::error::Error>> {
-    let root = app.path().app_data_dir()?;
+    let root = data_root(app)?;
     let data_dir = root.join("data");
     let documents_dir = root.join("library").join("documents");
     let trash_dir = root.join("library").join("trash");
@@ -690,6 +706,14 @@ fn open_database(app: &tauri::App) -> Result<AppDb, Box<dyn std::error::Error>> 
     std::fs::create_dir_all(&trash_dir)?;
     let settings_path = root.join("settings.json");
     let mut settings = read_settings(&settings_path);
+    let portable = cfg!(windows)
+        && std::env::current_exe()?
+            .parent()
+            .is_some_and(|directory| directory.join("portable.flag").is_file());
+    // A portable library must not reopen an absolute database path on the old PC.
+    if portable {
+        settings.database_path = None;
+    }
     let path = match settings.database_path.as_deref().map(PathBuf::from) {
         Some(candidate) if candidate.is_file() => candidate,
         Some(_) => {
@@ -700,6 +724,9 @@ fn open_database(app: &tauri::App) -> Result<AppDb, Box<dyn std::error::Error>> 
         None => data_dir.join("library.db"),
     };
     let conn = db::open(&path)?;
+    if portable {
+        db::rebase_portable_paths(&conn, &documents_dir, &trash_dir)?;
+    }
     Ok(AppDb {
         conn: Mutex::new(conn),
         path: Mutex::new(path),
@@ -760,6 +787,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            worker::initialize(app.path().resource_dir()?, data_root(app)?.join("models"));
             let database = open_database(app)?;
             app.manage(database);
             std::thread::spawn(|| {
@@ -768,6 +796,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            models::model_status,
+            models::install_models,
             database_path,
             get_theme,
             set_theme,

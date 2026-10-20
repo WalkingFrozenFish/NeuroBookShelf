@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { confirmAction } from "../confirm";
 import { Icon } from "../icons";
 import {
@@ -19,6 +19,12 @@ import { ReaderSidePanel } from "./ReaderSidePanel";
 import { PageArea, SelectionLayer } from "./SelectionLayer";
 import { TranslationOverlay } from "./TranslationOverlay";
 import { TranslationBlockRecord } from "../libraryApi";
+import { PdfNavigation } from "./PdfNavigation";
+import { PdfTextLayer } from "./PdfTextLayer";
+import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils";
+import type { TextMatch } from "../pdfText";
+import { translationQueue } from "../translationQueue";
+import { scrollWithinPanel } from "../scrollWithinPanel";
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
@@ -69,6 +75,11 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
   const [sideWidth, setSideWidth] = useState(SIDE_MAX);
   const [thumbPaintWidth, setThumbPaintWidth] = useState(THUMB_MIN);
   const [pagesOpen, setPagesOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchMatch, setSearchMatch] = useState<TextMatch | null>(null);
+  const [searchRequest, setSearchRequest] = useState(0);
+  const translationRevision = useSyncExternalStore(translationQueue.subscribe, translationQueue.getRevision);
+  const openNavigation = useCallback(() => setPagesOpen(true), []);
   const [narrowLayout, setNarrowLayout] = useState(() => window.matchMedia("(max-width: 980px)").matches);
   const queueRef = useRef(Promise.resolve());
   const pageDirtyRef = useRef(false);
@@ -189,6 +200,9 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
     setError("");
     setPdf(null);
     setPagesOpen(false);
+    setSearchQuery("");
+    setSearchMatch(null);
+    setSearchRequest(0);
 
     async function open() {
       try {
@@ -377,6 +391,8 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           {title}
         </strong>
         <div className="reader-tools" role="toolbar" aria-label="Инструменты страницы">
+          <button type="button" className="icon-only" aria-label="Поиск по книге" title="Поиск по книге (Ctrl+F)" onClick={() => setSearchRequest((value) => value + 1)}><Icon name="search" /></button>
+          <button type="button" className={overlay ? "icon-only active" : "icon-only"} aria-label="Показать переводы" title="Показать / скрыть переводы" aria-pressed={overlay} onClick={() => { setOverlay(!overlay); setSoloPopup(null); }}><Icon name="overlay" /></button>
           <button
             type="button"
             className={selectionMode ? "icon-only active" : "icon-only"}
@@ -396,13 +412,9 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           </button>
           <ReaderPageTranslate
             documentId={documentId}
+            title={title}
             pageNumber={pageNumber}
-            onBlocksChanged={() => setBlocksVersion((current) => current + 1)}
-            onShowOverlay={() => {
-              setSoloPopup(null);
-              setOverlay(true);
-            }}
-            onTranslated={dismissPageSelection}
+            pageCount={pageCount}
           />
         </div>
       </header>
@@ -418,7 +430,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
             <Icon name="clear" />
           </button>
         </div>
-        <div className="thumbs-scroll">
+        <PdfNavigation pdf={pdf} pageNumber={pageNumber} onOpenPage={goToPage} onMatch={setSearchMatch} onQueryChange={setSearchQuery} onOpenPanel={openNavigation} searchRequest={searchRequest}>
         {Array.from({ length: pageCount }, (_, index) => {
           const number = index + 1;
           return (
@@ -433,7 +445,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
             />
           );
         })}
-        </div>
+        </PdfNavigation>
         <div
           className="thumbs-resize"
           role="separator"
@@ -482,6 +494,8 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           documentId={documentId}
           pageNumber={pageNumber}
           zoom={zoom}
+          searchQuery={searchQuery}
+          searchMatch={searchMatch}
           onScale={setResolvedScale}
           selectionMode={selectionMode}
           selection={selection}
@@ -492,7 +506,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           onTranslate={() => void translateSelection()}
           highlight={highlight}
           overlay={overlay}
-          blocksVersion={blocksVersion}
+          blocksVersion={blocksVersion + translationRevision}
           highlightedId={highlight?.id ?? null}
           soloPopup={soloPopup}
           onOverlaySelect={selectBlock}
@@ -573,7 +587,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
         pageNumber={pageNumber}
         onOpenPage={goToPage}
         onDirtyChange={onDirtyChange}
-        blocksVersion={blocksVersion}
+        blocksVersion={blocksVersion + translationRevision}
         highlightedId={highlight?.id ?? null}
         onHighlight={selectBlock}
         onShowOverlay={() => {
@@ -596,6 +610,8 @@ function PageView({
   documentId,
   pageNumber,
   zoom,
+  searchQuery,
+  searchMatch,
   onScale,
   selectionMode,
   selection,
@@ -619,6 +635,8 @@ function PageView({
   documentId: number;
   pageNumber: number;
   zoom: Zoom;
+  searchQuery: string;
+  searchMatch: TextMatch | null;
   onScale: (scale: number) => void;
   selectionMode: boolean;
   selection: PageArea | null;
@@ -642,6 +660,7 @@ function PageView({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [box, setBox] = useState({ width: 0, height: 0 });
   const [pageError, setPageError] = useState("");
+  const [textViewport, setTextViewport] = useState<{ pageNumber: number; viewport: PageViewport } | null>(null);
 
   useEffect(() => {
     const node = viewRef.current;
@@ -666,6 +685,7 @@ function PageView({
     }
     const state = { cancelled: false, task: null as RenderTask | null };
     setPageError("");
+    setTextViewport(null);
 
     async function draw() {
       const page = await pdf.getPage(pageNumber);
@@ -697,6 +717,7 @@ function PageView({
       if (view && zoom.mode !== "scale") {
         trimPageToView(view, canvas!, zoom.mode === "fit-page" || fitted.height <= availableHeight);
       }
+      setTextViewport({ pageNumber, viewport: page.getViewport({ scale: Number.parseFloat(canvas!.style.width) / base.width }) });
       state.task = page.render({ canvas: canvas!, viewport, annotationMode: AnnotationMode.ENABLE });
       try {
         await state.task.promise;
@@ -709,7 +730,7 @@ function PageView({
       }
     }
 
-    void draw();
+    void draw().catch((failure) => { if (!state.cancelled) setPageError(errorText(failure)); });
     return () => {
       state.cancelled = true;
       state.task?.cancel();
@@ -728,13 +749,14 @@ function PageView({
           if (!(target instanceof Element)) {
             return;
           }
-          if (target.closest(".translation-popup, .selection-actions")) {
+          if (target.closest(".translation-popup, .selection-actions, .pdf-text-layer span") || window.getSelection()?.toString()) {
             return;
           }
           onTogglePopups();
         }}
       >
         <canvas ref={canvasRef} />
+        {textViewport?.pageNumber === pageNumber && <PdfTextLayer key={`${documentId}-${pageNumber}`} pdf={pdf} pageNumber={pageNumber} viewport={textViewport.viewport} query={searchQuery} activeMatch={searchMatch} onError={setPageError} />}
         <SelectionLayer
           key={pageNumber}
           active={selectionMode}
@@ -803,7 +825,9 @@ function Thumbnail({
     if (!active) {
       return;
     }
-    buttonRef.current?.scrollIntoView({ block: "nearest" });
+    const button = buttonRef.current;
+    const panel = button?.closest<HTMLElement>(".thumbs-scroll");
+    if (button && panel) scrollWithinPanel(button, panel);
   }, [active]);
 
   useEffect(() => {

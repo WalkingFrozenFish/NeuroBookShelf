@@ -360,6 +360,24 @@ export type WorkerResponse = {
   };
 };
 
+export type ModelStatus = {
+  translationReady: boolean;
+  ocrReady: boolean;
+  bundledRuntime: boolean;
+  installing: boolean;
+  modelsPath: string;
+  downloadBytes: number;
+  progress: { phase: string; downloaded?: number; total?: number; file?: string; message?: string } | null;
+};
+
+export function modelStatus(): Promise<ModelStatus> {
+  return invoke<ModelStatus>("model_status");
+}
+
+export function installModels(): Promise<WorkerResponse> {
+  return invoke<WorkerResponse>("install_models");
+}
+
 export type TextBlock = {
   text: string;
   x: number;

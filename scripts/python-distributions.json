@@ -1,0 +1,10 @@
+{
+  "windows-x64": {
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.11.14%2B20251014-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "c2a7b0bb86eb9f1cc094a01bdabef7ddc77f89f8e45161fa7819f2b4a7ba7bc1"
+  },
+  "macos-arm64": {
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.11.14%2B20251014-aarch64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "cd54cc868a9b1056fbd4654509431f402f0365329618e2583b60c82f73da4e56"
+  }
+}

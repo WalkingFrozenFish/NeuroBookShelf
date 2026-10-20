@@ -57,6 +57,42 @@ const DOCUMENT_SELECT: &str = "SELECT d.id, d.title, d.created_at, d.updated_at,
        d.deleted_at, d.last_page, d.last_zoom
 FROM documents d";
 
+pub fn rebase_portable_paths(
+    conn: &Connection,
+    documents: &Path,
+    trash: &Path,
+) -> Result<(), String> {
+    let tx = conn.unchecked_transaction().map_err(sql_error)?;
+    let rows = {
+        let mut statement = tx.prepare("SELECT id, internal_filename, deleted_at IS NOT NULL FROM documents WHERE internal_filename IS NOT NULL").map_err(sql_error)?;
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, bool>(2)?,
+                ))
+            })
+            .map_err(sql_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(sql_error)?
+    };
+    for (id, name, deleted) in rows {
+        if Path::new(&name).components().count() != 1
+            || Path::new(&name).file_name().and_then(|part| part.to_str()) != Some(&name)
+        {
+            return Err("Недопустимое имя файла в переносимой библиотеке".to_string());
+        }
+        let path = if deleted { trash } else { documents }.join(name);
+        tx.execute(
+            "UPDATE documents SET path = ?1 WHERE id = ?2",
+            params![path.to_string_lossy(), id],
+        )
+        .map_err(sql_error)?;
+    }
+    tx.commit().map_err(sql_error)
+}
+
 pub fn list_documents(conn: &Connection) -> Result<Vec<Document>, String> {
     list_documents_filtered(
         conn,
@@ -1534,6 +1570,46 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static NEXT_DB: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn portable_paths_follow_the_moved_library_and_keep_trash_separate() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let book = insert_imported_document(
+            &conn,
+            "Book",
+            "book.pdf",
+            "100.pdf",
+            Path::new("old/100.pdf"),
+            10,
+            "hash",
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE documents SET deleted_at = 'now' WHERE id = ?1",
+            [book.id],
+        )
+        .unwrap();
+        let active = insert_imported_document(
+            &conn,
+            "Active",
+            "active.pdf",
+            "101.pdf",
+            Path::new("old/101.pdf"),
+            10,
+            "hash2",
+        )
+        .unwrap();
+        rebase_portable_paths(&conn, Path::new("new/documents"), Path::new("new/trash")).unwrap();
+        assert_eq!(
+            get_document(&conn, book.id).unwrap().path,
+            Some(Path::new("new/trash").join("100.pdf").display().to_string())
+        );
+        assert_eq!(
+            get_document(&conn, active.id).unwrap().path,
+            Some(Path::new("new/documents").join("101.pdf").display().to_string())
+        );
+    }
 
     fn temp_db() -> (std::path::PathBuf, Connection) {
         let n = NEXT_DB.fetch_add(1, Ordering::Relaxed);
