@@ -45,4 +45,8 @@ if directory:
             verified.add(filename)
     if verified != {name for name in required if not name.startswith("SHA256SUMS-")}:
         raise SystemExit("Checksums do not cover every installer")
+    if len(sys.argv) > 3:
+        if len(sys.argv) != 5 or sys.argv[3] != "--write-upload-list":
+            raise SystemExit("Expected --write-upload-list PATH")
+        Path(sys.argv[4]).write_text("".join(str(files[name]) + "\n" for name in sorted(required)), encoding="utf-8")
 print("All Windows and macOS release assets are present")

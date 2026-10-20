@@ -156,14 +156,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python scripts/check_release_assets.py --directory release-assets
+          python scripts/check_release_assets.py --directory release-assets --write-upload-list release-assets-list.txt
           if ! gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "NeuroBookShelf $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
           elif [ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft')" != true ]; then
             echo "This version is already published. Create a new version instead of replacing its files."
             exit 1
           fi
-          mapfile -d '' files < <(find release-assets -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*-portable.zip' -o -name 'SHA256SUMS-*.txt' \) -print0)
+          mapfile -t files < release-assets-list.txt
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
           gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' > release-assets.txt
           python scripts/check_release_assets.py release-assets.txt
