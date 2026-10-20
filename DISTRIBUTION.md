@@ -2,7 +2,7 @@
 
 ## Для пользователя
 
-На странице GitHub Releases выбирайте файл под свою систему:
+На странице [GitHub Releases](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest) (блок Releases справа на главной странице репозитория) выбирайте файл под свою систему:
 
 - Windows x64: `*-setup.exe`, установка для текущего пользователя.
 - Windows x64 portable: `*-windows-x64-portable.zip`, распаковать в доступную для записи папку и открыть `NeuroBookShelf.exe`.
@@ -36,8 +36,9 @@ Workflow: `.github/workflows/desktop.yml`.
 - Push в `master` или `codex/**`, а также pull request запускают проверки и сборки.
 - Windows собирается на `windows-latest`, macOS ARM64 — на `macos-15`.
 - В Actions → Desktop installers → выбранный запуск → Artifacts появляются установщики.
-- Тег `v*` дополнительно создаёт **черновик GitHub Release** с установщиками, portable ZIP и SHA256SUMS.
-- Черновик нужно проверить и опубликовать в GitHub Releases. Обычные push не публикуют публичный релиз.
+- Тег `v*` создаёт черновик GitHub Release с установщиками, portable ZIP и SHA256SUMS.
+- После успешных проверок и сборок обеих платформ отдельный job проверяет наличие всех файлов и **публикует релиз**, отмечая его Latest. Если сборка не прошла, релиз остаётся черновиком.
+- Обычные push не публикуют публичный релиз. Перед новым тегом обновите `RELEASE_NOTES.md` с описанием версии и файлами для скачивания.
 
 Перед релизом версии в `package.json`, `src-tauri/tauri.conf.json` и `src-tauri/Cargo.toml` должны совпадать с тегом.
 Пример выпуска текущей версии после слияния PR:

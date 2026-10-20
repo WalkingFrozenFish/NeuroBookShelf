@@ -1,5 +1,7 @@
 # Local Library Reader
 
+**[Скачать последнюю версию для Windows и macOS](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest)** · [Все релизы](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases)
+
 Локальное desktop-приложение для хранения и чтения PDF: полки, теги, закладки, заметки, перевод областей и страниц, словарь.
 
 Приложение работает на этом компьютере. Облачных сервисов, аккаунтов и синхронизации нет.

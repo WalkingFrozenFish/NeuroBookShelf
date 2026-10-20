@@ -139,3 +139,22 @@ jobs:
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             gh release upload "$GITHUB_REF_NAME" bundle/*-portable.zip --clobber
           fi
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [checks, installers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Publish complete release after both platforms pass
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' > release-assets.txt
+          python scripts/check_release_assets.py release-assets.txt
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest --notes-file RELEASE_NOTES.md
