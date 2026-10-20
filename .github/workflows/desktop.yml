@@ -2,7 +2,7 @@ name: Desktop installers
 
 on:
   push:
-    branches: [master, 'codex/**']
+    branches: [master, main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -30,14 +32,17 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: python -m unittest discover -s tests -p 'test_*.py'
+      - run: python scripts/check_version.py
       - name: Match release tag to application version
         if: startsWith(github.ref, 'refs/tags/')
-        run: python scripts/check_version.py "${GITHUB_REF_NAME}"
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          python scripts/check_version.py "$GITHUB_REF_NAME"
+          git merge-base --is-ancestor HEAD "origin/$DEFAULT_BRANCH"
 
   installers:
     needs: checks
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -53,7 +58,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
-      SIGN_MACOS: ${{ secrets.APPLE_CERTIFICATE != '' }}
+      SIGN_MACOS: ${{ startsWith(github.ref, 'refs/tags/') && secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -70,7 +75,7 @@ jobs:
       - run: npm ci
       - name: Build and smoke-test private Python runtime
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_SIGNING_IDENTITY: ${{ startsWith(github.ref, 'refs/tags/') && secrets.APPLE_SIGNING_IDENTITY || '' }}
         run: python scripts/build_runtime.py
       - name: Verify first-run model download, OCR and translation
         run: python scripts/smoke_models.py
@@ -79,20 +84,12 @@ jobs:
       - name: Build installers without Apple certificate
         if: runner.os != 'macOS' || env.SIGN_MACOS != 'true'
         uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: --config src-tauri/tauri.release.conf.json --bundles ${{ matrix.bundles }}
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('NeuroBookShelf {0}', github.ref_name) || '' }}
-          releaseBody: 'Windows: setup.exe. macOS Apple Silicon: .dmg. Models are downloaded from the app on first use. See DISTRIBUTION.md for installation and signing details.'
-          releaseDraft: true
-          prerelease: false
       - name: Build macOS installer with Developer ID and notarization
         if: runner.os == 'macOS' && env.SIGN_MACOS == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -101,11 +98,6 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           args: --config src-tauri/tauri.release.conf.json --bundles ${{ matrix.bundles }}
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('NeuroBookShelf {0}', github.ref_name) || '' }}
-          releaseBody: 'Windows: setup.exe. macOS Apple Silicon: .dmg. Models are downloaded from the app on first use. See DISTRIBUTION.md for installation and signing details.'
-          releaseDraft: true
-          prerelease: false
       - name: Verify runtime copied into Windows package
         if: runner.os == 'Windows'
         run: python scripts/smoke_runtime.py src-tauri/target/release/runtime
@@ -117,6 +109,8 @@ jobs:
       - name: Package Windows portable ZIP
         if: runner.os == 'Windows'
         run: python scripts/package_portable.py
+      - name: Generate package checksums
+        run: python scripts/release_checksums.py "${{ matrix.platform }}"
       - name: Upload installers and portable archive
         uses: actions/upload-artifact@v4
         with:
@@ -128,21 +122,23 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/dmg/*.dmg
             bundle/*-portable.zip
-      - name: Attach portable ZIP and checksums to draft release
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
+            bundle/SHA256SUMS-*.txt
+
+  ci:
+    name: CI
+    if: always()
+    needs: [checks, installers]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require checks and both installer builds
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python scripts/release_checksums.py "${{ matrix.platform }}"
-          gh release upload "$GITHUB_REF_NAME" bundle/SHA256SUMS-${{ matrix.platform }}.txt --clobber
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            gh release upload "$GITHUB_REF_NAME" bundle/*-portable.zip --clobber
-          fi
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          INSTALLERS_RESULT: ${{ needs.installers.result }}
+        run: test "$CHECKS_RESULT" = success && test "$INSTALLERS_RESULT" = success
 
   publish-release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [checks, installers]
+    needs: [checks, installers, ci]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -151,10 +147,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: NeuroBookShelf-*-${{ github.sha }}
+          path: release-assets
+          merge-multiple: true
       - name: Publish complete release after both platforms pass
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          python scripts/check_release_assets.py --directory release-assets
+          if ! gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "NeuroBookShelf $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          elif [ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft')" != true ]; then
+            echo "This version is already published. Create a new version instead of replacing its files."
+            exit 1
+          fi
+          mapfile -d '' files < <(find release-assets -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*-portable.zip' -o -name 'SHA256SUMS-*.txt' \) -print0)
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
           gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' > release-assets.txt
           python scripts/check_release_assets.py release-assets.txt
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest --notes-file RELEASE_NOTES.md

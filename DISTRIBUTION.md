@@ -33,21 +33,21 @@ Windows portable определяется файлом `portable.flag` рядо�
 
 Workflow: `.github/workflows/desktop.yml`.
 
-- Push в `master` или `codex/**`, а также pull request запускают проверки и сборки.
+- Push в `master` или `main`, а также pull request запускают проверки и сборки.
 - Windows собирается на `windows-latest`, macOS ARM64 — на `macos-15`.
 - В Actions → Desktop installers → выбранный запуск → Artifacts появляются установщики.
-- Тег `v*` создаёт черновик GitHub Release с установщиками, portable ZIP и SHA256SUMS.
-- После успешных проверок и сборок обеих платформ отдельный job проверяет наличие всех файлов и **публикует релиз**, отмечая его Latest. Если сборка не прошла, релиз остаётся черновиком.
+- Тег `vX.Y.Z` из основной ветки запускает полный цикл сборки. После успеха обеих платформ отдельный job скачивает артефакты, проверяет SHA-256 и создаёт черновик GitHub Release с установщиками, portable ZIP и SHA256SUMS.
+- После успешных проверок и сборок обеих платформ отдельный job проверяет наличие всех файлов и **публикует релиз**, отмечая его Latest. Если сборка не прошла, релиз не создаётся; если загрузка файлов не удалась, уже созданный релиз остаётся черновиком.
 - Обычные push не публикуют публичный релиз. Перед новым тегом обновите `RELEASE_NOTES.md` с описанием версии и файлами для скачивания.
 
-Перед релизом версии в `package.json`, `src-tauri/tauri.conf.json` и `src-tauri/Cargo.toml` должны совпадать с тегом.
-Пример выпуска текущей версии после слияния PR:
+Перед релизом версии в `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` и обоих lock-файлах должны совпадать с тегом. `python scripts/check_version.py vX.Y.Z` также проверяет заголовок `RELEASE_NOTES.md`. Тег должен входить в историю основной ветки. Полный процесс — в [docs/WORKFLOW.md](docs/WORKFLOW.md).
+Схема выпуска следующей версии после обновления версий и слияния PR (`X.Y.Z` замените реальным номером; опубликованный `v0.1.0` не пересоздавайте):
 
 ```bash
 git checkout master
 git pull --ff-only
-git tag v0.1.0
-git push origin v0.1.0
+git tag -a vX.Y.Z -m "NeuroBookShelf X.Y.Z"
+git push origin vX.Y.Z
 ```
 
 Actions собирает приватный CPython 3.11.14 из официальных Python standalone архивов.

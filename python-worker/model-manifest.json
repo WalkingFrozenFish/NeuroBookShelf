@@ -15,7 +15,9 @@
         "model.bin",
         "config.json",
         "shared_vocabulary.json",
-        "sentencepiece.model"
+        "sentencepiece.model",
+        "README.md",
+        "metadata.json"
       ]
     },
     {
