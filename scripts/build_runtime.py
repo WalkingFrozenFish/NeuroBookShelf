@@ -17,6 +17,26 @@ def run(*args, **kwargs):
     subprocess.run([str(arg) for arg in args], cwd=ROOT, check=True, **kwargs)
 
 
+def bundle_windows_crt(python_root):
+    if os.name != "nt":
+        return
+    candidates = []
+    for variable in ("ProgramFiles", "ProgramFiles(x86)"):
+        if os.environ.get(variable):
+            base = Path(os.environ[variable]) / "Microsoft Visual Studio"
+            candidates.extend(base.glob("*/*/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT"))
+    if not candidates:
+        raise RuntimeError("Visual Studio x64 redistributable CRT files are required for packaging")
+    crt = max(candidates, key=lambda path: tuple(int(part) for part in path.parent.parent.name.split(".")))
+    files = list(crt.glob("*.dll"))
+    for openmp in crt.parent.glob("Microsoft.VC*.OpenMP"):
+        files.extend(openmp.glob("*.dll"))
+    for source in files:
+        shutil.copy2(source, python_root / source.name)
+    if not (python_root / "msvcp140.dll").is_file():
+        raise RuntimeError("Missing app-local MSVCP140.dll")
+
+
 def main():
     if platform.system() not in ("Windows", "Darwin"):
         raise RuntimeError("Installer runtimes currently support Windows and macOS")
@@ -51,6 +71,7 @@ def main():
     python = python_root / ("python.exe" if os.name == "nt" else "bin/python3")
     run(python, "-s", "-m", "ensurepip")
     run(python, "-s", "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir", "--only-binary", ":all:", "-r", ROOT / "python-worker/requirements.txt", "-c", ROOT / "python-worker/requirements.lock")
+    bundle_windows_crt(python_root)
     for name in ("worker.py", "model_manager.py", "model-manifest.json"):
         shutil.copy2(ROOT / "python-worker" / name, runtime / name)
     shutil.copy2(ROOT / "python-worker/requirements.lock", runtime / "requirements.lock")
