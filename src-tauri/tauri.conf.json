@@ -14,6 +14,7 @@
       {
         "label": "main",
         "title": "NeuroBookShelf",
+        "maximized": true,
         "width": 1100,
         "height": 720
       }
