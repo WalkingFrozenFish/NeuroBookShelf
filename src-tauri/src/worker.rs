@@ -402,6 +402,7 @@ fn spawn_worker(program: &[String], script: &PathBuf) -> Result<Child, WorkerFai
             command
                 .env("LLR_BUNDLED_RUNTIME", "1")
                 .env("PYTHONNOUSERSITE", "1")
+                .env("PYTHONDONTWRITEBYTECODE", "1")
                 .env_remove("PYTHONHOME")
                 .env_remove("PYTHONPATH");
         }

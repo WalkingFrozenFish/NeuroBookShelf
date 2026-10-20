@@ -75,7 +75,6 @@ def main():
     for name in ("worker.py", "model_manager.py", "model-manifest.json"):
         shutil.copy2(ROOT / "python-worker" / name, runtime / name)
     shutil.copy2(ROOT / "python-worker/requirements.lock", runtime / "requirements.lock")
-    run(python, "-s", "-c", "import pymupdf, paddle, paddleocr, ctranslate2, sentencepiece; print('Bundled Python imports OK')")
     run(python, "-s", ROOT / "scripts/smoke_runtime.py", runtime)
     identity = os.environ.get("APPLE_SIGNING_IDENTITY", "").strip() or "-"
     config = {

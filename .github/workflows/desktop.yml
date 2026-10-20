@@ -106,6 +106,14 @@ jobs:
           releaseBody: 'Windows: setup.exe. macOS Apple Silicon: .dmg. Models are downloaded from the app on first use. See DISTRIBUTION.md for installation and signing details.'
           releaseDraft: true
           prerelease: false
+      - name: Verify runtime copied into Windows package
+        if: runner.os == 'Windows'
+        run: python scripts/smoke_runtime.py src-tauri/target/release/runtime
+      - name: Verify runtime copied into macOS app and sealed signature
+        if: runner.os == 'macOS'
+        run: |
+          python scripts/smoke_runtime.py src-tauri/target/release/bundle/macos/NeuroBookShelf.app/Contents/Resources/runtime
+          codesign --verify --deep --strict src-tauri/target/release/bundle/macos/NeuroBookShelf.app
       - name: Package Windows portable ZIP
         if: runner.os == 'Windows'
         run: python scripts/package_portable.py
