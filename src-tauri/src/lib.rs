@@ -84,6 +84,9 @@ fn set_theme(db: State<AppDb>, theme: String) -> Result<(), String> {
 
 #[tauri::command]
 fn relocate_database(app: tauri::AppHandle, db: State<AppDb>) -> Result<Option<String>, String> {
+    if portable_directory().is_some() {
+        return Err("В portable-режиме база находится в user-data. Для переноса переместите всю папку приложения.".to_string());
+    }
     let picked = app
         .dialog()
         .file()
@@ -681,17 +684,21 @@ fn delete_tag(db: State<AppDb>, id: i64) -> Result<(), String> {
     with_conn(db, |conn| db::delete_tag(conn, id))
 }
 
+fn portable_directory() -> Option<PathBuf> {
+    if !cfg!(windows) {
+        return None;
+    }
+    let executable = std::env::current_exe().ok()?;
+    let directory = executable.parent()?;
+    directory.join("portable.flag").is_file().then(|| directory.to_path_buf())
+}
+
 fn data_root(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Error>> {
     if let Some(path) = std::env::var_os("LLR_DATA_DIR") {
         return Ok(PathBuf::from(path));
     }
-    if cfg!(windows) {
-        let executable = std::env::current_exe()?;
-        if let Some(directory) = executable.parent() {
-            if directory.join("portable.flag").is_file() {
-                return Ok(directory.join("user-data"));
-            }
-        }
+    if let Some(directory) = portable_directory() {
+        return Ok(directory.join("user-data"));
     }
     Ok(app.path().app_data_dir()?)
 }
@@ -706,10 +713,7 @@ fn open_database(app: &tauri::App) -> Result<AppDb, Box<dyn std::error::Error>> 
     std::fs::create_dir_all(&trash_dir)?;
     let settings_path = root.join("settings.json");
     let mut settings = read_settings(&settings_path);
-    let portable = cfg!(windows)
-        && std::env::current_exe()?
-            .parent()
-            .is_some_and(|directory| directory.join("portable.flag").is_file());
+    let portable = portable_directory().is_some();
     // A portable library must not reopen an absolute database path on the old PC.
     if portable {
         settings.database_path = None;

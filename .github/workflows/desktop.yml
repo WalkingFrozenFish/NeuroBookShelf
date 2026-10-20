@@ -53,6 +53,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      SIGN_MACOS: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -75,7 +76,20 @@ jobs:
         run: python scripts/smoke_models.py
       - name: Database and filesystem tests (Python protocol smoke tested above)
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --skip worker::tests
-      - name: Build installers (tags also create a draft GitHub Release)
+      - name: Build installers without Apple certificate
+        if: runner.os != 'macOS' || env.SIGN_MACOS != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --config src-tauri/tauri.release.conf.json --bundles ${{ matrix.bundles }}
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('NeuroBookShelf {0}', github.ref_name) || '' }}
+          releaseBody: 'Windows: setup.exe. macOS Apple Silicon: .dmg. Models are downloaded from the app on first use. See DISTRIBUTION.md for installation and signing details.'
+          releaseDraft: true
+          prerelease: false
+      - name: Build macOS installer with Developer ID and notarization
+        if: runner.os == 'macOS' && env.SIGN_MACOS == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
