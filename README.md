@@ -8,7 +8,7 @@ An offline PDF library with local OCR and translation. Organize books on shelves
 [![Desktop CI](https://github.com/WalkingFrozenFish/NeuroBookShelf/actions/workflows/desktop.yml/badge.svg?branch=master)](https://github.com/WalkingFrozenFish/NeuroBookShelf/actions/workflows/desktop.yml)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPLv3-blue.svg)](LICENSE)
 
-**[Download the latest release](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest)** · [Report a bug or suggest a feature](https://github.com/WalkingFrozenFish/NeuroBookShelf/issues/new/choose) · [Changelog](CHANGELOG.md)
+**[Download the latest release](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest)** · [User guide](docs/GUIDE.en.md) · [Report a bug or suggest a feature](https://github.com/WalkingFrozenFish/NeuroBookShelf/issues/new/choose) · [Changelog](CHANGELOG.md)
 
 ![NeuroBookShelf reader with a sample PDF](site/assets/reader-en.png)
 
@@ -23,7 +23,7 @@ An offline PDF library with local OCR and translation. Organize books on shelves
 
 ### Coming in the next release
 
-The development version adds a Russian/English interface switch, a custom accent color picker, downloadable **English ↔ Russian** and **French ↔ English** translation models, automatic model routing, source/target selection and download cancellation. These changes are not yet included in the published **0.1.0** installer.
+The development version adds a Russian/English interface switch, a custom accent color picker, downloadable **English ↔ Russian** and **French ↔ English** translation models, automatic model routing, source/target selection and download cancellation. Settings now have four tabs; Trash is in the library sidebar. These changes are not yet included in the published **0.1.0** installer.
 
 The stable 0.1.0 release translates **English → Russian**. OCR currently supports **English** in both versions. Other translation languages use the PDF's text layer; multilingual scan recognition is not included.
 
@@ -37,15 +37,23 @@ The stable 0.1.0 release translates **English → Russian**. OCR currently suppo
 
 Python and required libraries are included. End users do not need Git, Node.js, Rust or a separate Python installation. The Windows installer downloads WebView2 if necessary.
 
-You can read PDFs immediately. Download about **199 MiB** of OCR and English → Russian models when needed. In the development version, open **Settings → Models**, choose source and target languages and download the required pairs from the table. The app chooses installed models for each fragment. Once models are installed, reading, OCR and translation work offline. Your PDFs are not uploaded.
+You can read PDFs immediately. Download about **199 MiB** of OCR and English → Russian models when needed. In the development version, open **Settings → OCR & translation**, choose source and target languages and download the required pairs from the table. The app chooses installed models for each fragment. Once models are installed, reading, OCR and translation work offline. Your PDFs are not uploaded.
 
 Windows builds currently have no publisher certificate. macOS uses an ad-hoc signature without notarization. Your system may warn or block the first launch. Intel Macs and ready to use Linux packages are not supported yet. See [installation details](DISTRIBUTION.en.md).
 
 ## Appearance and languages
 
-In the development version, **Settings → Appearance** offers Russian/English interface language, light/dark modes, preset palettes and a custom color picker. The chosen color supplies the primary hue; the app adjusts brightness for each mode. Interface language and translation model are independent preferences.
+In the development version, open **Settings** at the bottom of the library sidebar. **General** contains the Russian/English interface switch, **Data** contains storage and reset actions, **OCR & translation** contains local models, and **Appearance** contains light/dark modes, preset palettes and a custom color picker. The chosen color supplies the primary hue; the app adjusts brightness for each mode. Interface language and translation model are independent preferences.
 
 PDF appearance has separate **Original**, **Dimmed** and **Night** modes. Night mode also darkens white regions in scans and changes illustration colors. The original PDF and exported copies remain unchanged.
+
+## Quick start and help
+
+1. Import a PDF and press **Read**. Add shelves or tags to organize your books.
+2. Use **Ctrl+F** for text search; keep bookmarks, notes and words in the reader side panel.
+3. Install local models when you need OCR or translation. In the development version, access them through **Settings → OCR & translation**.
+
+The [user guide](docs/GUIDE.en.md) covers library and trash navigation, settings, models, backups and troubleshooting. [Installation details](DISTRIBUTION.en.md) cover platform requirements. Both are available in English and Russian.
 
 ## Your data
 

@@ -6,17 +6,15 @@ import { errorText, getAppearance, setAppearance } from "./libraryApi";
 import { DictionaryPage } from "./pages/DictionaryPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { ReaderPage } from "./pages/ReaderPage";
-import { TrashPage } from "./pages/TrashPage";
 import { applyAppearance, cachedAppearance, normalizeAppearance, type Appearance } from "./theme";
 import { TranslationQueuePanel } from "./TranslationQueuePanel";
 import "./styles.css";
 
-type PageId = "library" | "reader" | "trash" | "dictionary";
+type PageId = "library" | "reader" | "dictionary";
 
-const pages: { id: PageId; label: string; icon: "library" | "reader" | "trash" }[] = [
+const pages: { id: PageId; label: string; icon: "library" | "reader" }[] = [
   { id: "library", label: "Библиотека", icon: "library" },
   { id: "reader", label: "Читалка", icon: "reader" },
-  { id: "trash", label: "Корзина", icon: "trash" },
 ];
 
 function App() {
@@ -128,7 +126,6 @@ function App() {
         {page === "reader" && (
           <ReaderPage documentId={documentId} registerLeaveGuard={registerLeaveGuard} appearance={appearance} onAppearance={changeAppearance} appearancePending={appearancePending} />
         )}
-        {page === "trash" && <TrashPage />}
         {page === "dictionary" && <DictionaryPage onBack={() => setPage("library")} />}
       </main>
       <TranslationQueuePanel />

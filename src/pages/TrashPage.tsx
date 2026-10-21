@@ -15,7 +15,7 @@ import {
 } from "../libraryApi";
 import { openPdf } from "../pdfSetup";
 
-export function TrashPage() {
+export function TrashPage({ onLibraryChanged }: { onLibraryChanged?: () => Promise<void> }) {
   const [documents, setDocuments] = useState<DocumentRecord[] | null>(null);
   const [shelves, setShelves] = useState<NamedRecord[]>([]);
   const [tags, setTags] = useState<NamedRecord[]>([]);
@@ -73,11 +73,13 @@ export function TrashPage() {
     try {
       await action();
       await reload();
+      await onLibraryChanged?.();
       return true;
     } catch (actionError: unknown) {
       setError(errorText(actionError));
       try {
         await reload();
+        await onLibraryChanged?.();
       } catch {
         // На экране остаётся ошибка действия.
       }
@@ -154,7 +156,7 @@ export function TrashPage() {
   }
 
   return (
-    <section className="library">
+    <section className="library trash-browser">
       <header className="trash-toolbar">
         <h1>{t("Корзина")}</h1>
         {documents && documents.length > 0 ? (

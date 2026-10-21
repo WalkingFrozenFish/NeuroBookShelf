@@ -20,7 +20,7 @@ The published 0.1.0 release supports English → Russian translation and English
 
 These features are in the development version and require a new application release:
 
-- Open **Settings → Models and translation**.
+- Open **Settings → OCR & translation**.
 - Choose a source language, or automatic detection, and the target language.
 - Find the required language pair in the table and download its model. Installed models are selected automatically for each fragment.
 - The built-in catalog includes English ↔ Russian and French ↔ English. Refresh the upstream catalog to find more available pairs.
@@ -29,7 +29,7 @@ These features are in the development version and require a new application rele
 
 Queued jobs keep the translation direction selected when they were added. Existing saved translations are not automatically changed when you select another language.
 
-The interface language (Russian/English) is a separate setting under **Appearance**.
+The interface language (Russian/English) is a separate setting under **Settings → General**. Themes and custom colors are under **Appearance**. See the bilingual [user guide](docs/GUIDE.en.md) for all settings and library navigation.
 
 ## Data and portability
 

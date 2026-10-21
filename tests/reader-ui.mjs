@@ -45,6 +45,9 @@ try {
   await page.addInitScript(() => {
     const doc = { id: 1, title: 'A short guide to local reading', path: '/fixture.pdf', deletedAt: null, shelfIds: [], tagIds: [], lastPage: 1, lastZoom: 'fit-width', createdAt: '', updatedAt: '', originalFilename: 'fixture.pdf', fileSize: 1000 };
     window.__testSaved = [];
+    window.__testBooks = [doc];
+    window.__testTrash = [{ ...doc, id: 2, title: 'Restorable book', deletedAt: '2026-10-20T10:00:00Z' }];
+    window.__testResetCalls = 0;
     window.__testTranslateCalls = 0;
     window.__testModelsReady = true;
     window.__testActivePair = 'en-ru';
@@ -72,7 +75,10 @@ try {
         case 'cancel_model_download': window.__testProgress = { phase: 'cancelled' }; return;
         case 'select_translation_model': window.__testActivePair = args.pair; return;
         case 'database_path': return 'fixture.db';
-        case 'list_documents': return [doc];
+        case 'list_documents': return window.__testBooks;
+        case 'list_trash': return window.__testTrash;
+        case 'restore_document': { const book = window.__testTrash.find(item => item.id === args.id); window.__testTrash = window.__testTrash.filter(item => item.id !== args.id); const restored = { ...book, deletedAt: null }; window.__testBooks.push(restored); return restored; }
+        case 'reset_shelves': case 'reset_tags': case 'clear_library': window.__testResetCalls++; return;
         case 'get_document': return doc;
         case 'read_document_pdf': return fetch('/__test.pdf').then(r => r.arrayBuffer());
         case 'list_shelves': case 'list_tags': case 'list_notes': case 'list_bookmarks': case 'list_dictionary_entries': return [];
@@ -223,11 +229,26 @@ try {
   await page.evaluate(() => { window.__testModelsReady = false; });
   await page.getByRole('button', { name: 'Библиотека', exact: true }).click();
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+  assert.equal(await page.locator('.topbar').getByRole('button', { name: 'Корзина', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('tab', { name: 'Общие', exact: true }).getAttribute('aria-selected'), 'true');
+  assert.equal(await page.locator('.model-table').count(), 0, 'Model catalog loads only when its tab is opened');
+  await page.getByRole('tab', { name: 'Общие', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.getByRole('tabpanel', { name: 'Данные', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Сбросить полки', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Нет, оставить', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__testResetCalls), 0);
+  await page.getByRole('tab', { name: 'Данные', exact: true }).focus();
+  await page.keyboard.press('Home');
+  await page.getByRole('tabpanel', { name: 'Общие', exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'OCR и перевод', exact: true }).click();
   await page.locator('.model-table tbody tr').filter({ hasText: 'English → Russian' }).getByRole('button', { name: 'Скачать', exact: true }).click();
   await page.waitForFunction(() => window.__testModelsReady && !window.__testInstalling);
+  await page.getByRole('tab', { name: 'Общие', exact: true }).click();
   await page.getByRole('combobox', { name: 'Язык интерфейса', exact: true }).selectOption('en');
   await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
   assert.equal(await page.locator('html').getAttribute('lang'), 'en');
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   await page.getByRole('button', { name: 'Dark', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await page.waitForFunction(() => window.__testAppearance.mode === 'light');
@@ -240,8 +261,13 @@ try {
   const hue = await page.locator('html').evaluate(el => Number(el.style.getPropertyValue('--hue')));
   assert.ok(hue > 20 && hue < 24);
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('llr-appearance')).language), 'en');
+  await page.screenshot({ path: 'tests/settings-appearance-en.png' });
+  await page.getByRole('tab', { name: 'OCR & translation', exact: true }).click();
   const frenchRow = page.locator('.model-table tbody tr').filter({ hasText: 'French → English' });
   await frenchRow.getByRole('button', { name: 'Download', exact: true }).click();
+  await page.getByRole('tab', { name: 'General', exact: true }).click();
+  await page.getByRole('tabpanel', { name: 'General', exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'OCR & translation', exact: true }).click();
   await page.getByRole('button', { name: 'Cancel download', exact: true }).click();
   await page.getByText('Download cancelled. Completed files are kept; you can try again.', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.__testFrenchReady), false);
@@ -255,9 +281,36 @@ try {
   assert.equal(await page.locator('.model-table tbody tr').count(), 1);
   await page.getByRole('searchbox', { name: 'Search models', exact: true }).fill('');
   await page.screenshot({ path: 'tests/settings-en.png' });
+  await page.getByRole('tab', { name: 'General', exact: true }).click();
   await page.getByRole('combobox', { name: 'Interface language', exact: true }).selectOption('ru');
   await page.getByRole('heading', { name: 'Настройки', exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'Оформление', exact: true }).click();
   await page.getByRole('button', { name: 'Светлый', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Светлый', exact: true }).click();
+  await page.waitForFunction(() => window.__testAppearance.mode === 'light');
+  await page.screenshot({ path: 'tests/settings-appearance-ru.png' });
+  for (const size of [{ width: 900, height: 800 }, { width: 600, height: 850 }]) {
+    await page.setViewportSize(size);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    for (const tab of ['Общие', 'Данные', 'OCR и перевод', 'Оформление']) {
+      await page.getByRole('tab', { name: tab, exact: true }).click();
+      assert.equal(await page.getByRole('tabpanel', { name: tab, exact: true }).isVisible(), true);
+      assert.ok(await page.locator('.settings-screen').evaluate(el => el.scrollWidth <= el.clientWidth));
+    }
+    await page.screenshot({ path: `tests/settings-narrow-${size.width}.png` });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('button', { name: 'Корзина', exact: true }).click();
+  await page.getByRole('heading', { name: 'Корзина', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Корзина', exact: true }).getAttribute('aria-current'), 'page');
+  await page.locator('.trash-card').getByRole('button', { name: 'Восстановить', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Да, восстановить', exact: true }).click();
+  await page.getByText('Удалённых документов нет.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Все книги', exact: false }).click();
+  await page.getByText('Restorable book', { exact: true }).waitFor();
+  assert.equal(await page.locator('.mini-row').first().locator('.count').textContent(), '2');
+  await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+  await page.getByRole('tab', { name: 'Общие', exact: true }).waitFor();
   await page.screenshot({ path: 'tests/reader-ui.png' });
   assert.deepEqual(errors, []);
   console.log('UI integration passed: themed PDF loading in all three modes, rapid navigation, search, literal query, Ctrl+F, rotated page, outline, mouse selection, queue across screens, deduplication, narrow layout.');

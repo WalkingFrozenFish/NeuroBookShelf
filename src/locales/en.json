@@ -1,6 +1,6 @@
 {
-  "Не удалось определить язык. Выберите исходный язык в настройках перевода.": "Could not identify the language. Select the source language in translation settings.",
-  "Язык фрагмента определён неуверенно. Укажите исходный язык вручную.": "The fragment's language is uncertain. Select the source language manually.",
+  "Не удалось определить язык. Выберите исходный язык в настройках перевода.": "Could not detect the language. Select the source language in translation settings.",
+  "Язык фрагмента определён неуверенно. Укажите исходный язык вручную.": "Language detection is uncertain. Set the source language manually.",
   "Нужны модели: {0}. Откройте Настройки → Модели.": "Models required: {0}. Open Settings → Models.",
   "Библиотека": "Library",
   "Читалка": "Reader",
@@ -495,9 +495,19 @@
   "Исходный язык": "Source language",
   "Автоматически — несколько языков": "Automatic — multiple languages",
   "Переводить на": "Translate into",
-  "Не удалось определить язык. Выберите исходный язык в настройках перевода.": "Could not detect the language. Select the source language in translation settings.",
-  "Язык фрагмента определён неуверенно. Укажите исходный язык вручную.": "Language detection is uncertain. Set the source language manually.",
   "Некорректное направление перевода": "Invalid translation direction",
-  "Нужны модели: {0}. Откройте Настройки → Модели.": "Models required: {0}. Open Settings → Models.",
-  "нет модели в каталоге": "no model in the catalog"
+  "нет модели в каталоге": "no model in the catalog",
+  "Общие": "General",
+  "Данные": "Data",
+  "OCR и перевод": "OCR & translation",
+  "Язык, данные, локальные модели и оформление приложения.": "Language, library data, local models and appearance.",
+  "Разделы настроек": "Settings sections",
+  "Язык приложения": "App language",
+  "Язык интерфейса не меняет выбранное направление перевода книг.": "The interface language does not change your book translation direction.",
+  "Работа на вашем компьютере": "On your computer",
+  "Книги, заметки и переводы хранятся локально. Для чтения PDF не нужны аккаунт и интернет.": "Books, notes and translations are stored locally. Reading PDFs requires no account or internet connection.",
+  "Модели OCR и перевода загружаются отдельно во вкладке «OCR и перевод». После установки они работают без сети.": "Download OCR and translation models separately in the OCR & translation tab. Once installed, they work offline.",
+  "Сброс данных": "Reset data",
+  "Эти действия потребуют подтверждения. Перед очисткой сохраните резервную копию библиотеки.": "These actions require confirmation. Back up your library before clearing it.",
+  "Выберите светлый или тёмный режим. Цветовую гамму можно настроить отдельно.": "Choose light or dark mode. You can adjust the color palette separately."
 }
