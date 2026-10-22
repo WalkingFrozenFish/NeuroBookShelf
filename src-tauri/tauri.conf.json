@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "NeuroBookShelf",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.locallibrary.reader",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -14,6 +14,7 @@
       {
         "label": "main",
         "title": "NeuroBookShelf",
+        "maximized": true,
         "width": 1100,
         "height": 720
       }

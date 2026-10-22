@@ -1,7 +1,7 @@
 [package]
 name = "local-library-reader"
-version = "0.1.0"
-description = "Offline PDF library with local OCR and English-to-Russian translation"
+version = "0.2.0"
+description = "Offline PDF library with local OCR and multilingual translation"
 license = "AGPL-3.0-only"
 repository = "https://github.com/WalkingFrozenFish/NeuroBookShelf"
 edition = "2024"

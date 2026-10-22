@@ -27,6 +27,8 @@ assert "привет" in responses[1]["result"]["translatedText"].lower(), respo
 assert any("Hello OCR" in block["text"] for block in responses[2]["result"]["blocks"]), responses[2]
 manifest = json.loads((runtime / "model-manifest.json").read_text(encoding="utf-8"))
 for group in manifest["groups"]:
+    if group.get("archive") and group["target"] != "en-ru":
+        continue  # Optional language pairs are tested separately.
     for name in group.get("required", [entry["name"] for entry in group.get("files", [])]):
         assert (models / group["target"] / name).is_file(), f"Missing installed model file or attribution: {name}"
 print("Verified model download, translation and OCR with packaged Python")

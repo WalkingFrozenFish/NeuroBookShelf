@@ -1,27 +1,30 @@
+import { t } from "./i18n";
+import { useUiLanguage } from "./i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
-import { getTheme, setTheme } from "./libraryApi";
+import { errorText, getAppearance, setAppearance } from "./libraryApi";
 import { DictionaryPage } from "./pages/DictionaryPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { ReaderPage } from "./pages/ReaderPage";
-import { TrashPage } from "./pages/TrashPage";
-import { applyTheme } from "./theme";
+import { applyAppearance, cachedAppearance, normalizeAppearance, type Appearance } from "./theme";
 import { TranslationQueuePanel } from "./TranslationQueuePanel";
-import { ModelSetup } from "./ModelSetup";
 import "./styles.css";
 
-type PageId = "library" | "reader" | "trash" | "dictionary";
+type PageId = "library" | "reader" | "dictionary";
 
-const pages: { id: PageId; label: string; icon: "library" | "reader" | "trash" }[] = [
+const pages: { id: PageId; label: string; icon: "library" | "reader" }[] = [
   { id: "library", label: "Библиотека", icon: "library" },
   { id: "reader", label: "Читалка", icon: "reader" },
-  { id: "trash", label: "Корзина", icon: "trash" },
 ];
 
 function App() {
+  useUiLanguage();
   const [page, setPage] = useState<PageId>("library");
   const [documentId, setDocumentId] = useState<number | null>(null);
-  const [theme, setThemeId] = useState("light");
+  const [appearance, setAppearanceState] = useState(cachedAppearance);
+  const [appearancePending, setAppearancePending] = useState(true);
+  const [appearanceError, setAppearanceError] = useState("");
+  const appearanceSaving = useRef(false);
   const leaveGuard = useRef<() => boolean | Promise<boolean>>(() => true);
   const registerLeaveGuard = useCallback((guard: () => boolean | Promise<boolean>) => {
     leaveGuard.current = guard;
@@ -29,30 +32,40 @@ function App() {
 
   useEffect(() => {
     let active = true;
-    getTheme()
+    applyAppearance(cachedAppearance());
+    getAppearance()
       .then((stored) => {
         if (!active) {
           return;
         }
-        setThemeId(stored);
-        applyTheme(stored);
+        const next = normalizeAppearance(stored);
+        setAppearanceState(next);
+        applyAppearance(next);
       })
-      .catch(() => undefined);
+      .catch((error) => { if (active) setAppearanceError(errorText(error)); })
+      .finally(() => { if (active) setAppearancePending(false); });
     return () => {
       active = false;
     };
   }, []);
 
-  async function changeTheme(next: string) {
-    const previous = theme;
-    setThemeId(next);
-    applyTheme(next);
+  async function changeAppearance(next: Appearance) {
+    if (appearancePending || appearanceSaving.current) return;
+    appearanceSaving.current = true;
+    setAppearancePending(true);
+    setAppearanceError("");
+    const previous = appearance;
+    setAppearanceState(next);
+    applyAppearance(next);
     try {
-      await setTheme(next);
+      await setAppearance(next);
     } catch (error) {
-      setThemeId(previous);
-      applyTheme(previous);
-      throw error;
+      setAppearanceState(previous);
+      applyAppearance(previous);
+      setAppearanceError(errorText(error));
+    } finally {
+      appearanceSaving.current = false;
+      setAppearancePending(false);
     }
   }
 
@@ -80,7 +93,7 @@ function App() {
           <Icon name="reader" />
           <span>NeuroBookShelf</span>
         </div>
-        <nav className="nav" aria-label="Разделы">
+        <nav className="nav" aria-label={t("Разделы")}>
           {pages.map((item) => (
             <button
               key={item.id}
@@ -90,12 +103,12 @@ function App() {
               onClick={() => changePage(item.id)}
             >
               <Icon name={item.icon} />
-              {item.label}
+              {t(item.label)}
             </button>
           ))}
         </nav>
-        <ModelSetup />
       </header>
+      {appearanceError && <p className="error appearance-error" role="alert">{t("Не удалось сохранить или загрузить оформление:")}{" "}{appearanceError}</p>}
       <main
         className={
           page === "reader" ? "content reader-open" : page === "dictionary" ? "content lexicon-open" : "content"
@@ -105,14 +118,14 @@ function App() {
           <LibraryPage
             onOpen={openDocument}
             onOpenDictionary={() => setPage("dictionary")}
-            theme={theme}
-            onTheme={changeTheme}
+            appearance={appearance}
+            onAppearance={changeAppearance}
+            appearancePending={appearancePending}
           />
         )}
         {page === "reader" && (
-          <ReaderPage documentId={documentId} registerLeaveGuard={registerLeaveGuard} />
+          <ReaderPage documentId={documentId} registerLeaveGuard={registerLeaveGuard} appearance={appearance} onAppearance={changeAppearance} appearancePending={appearancePending} onOpenLibrary={() => setPage("library")} />
         )}
-        {page === "trash" && <TrashPage />}
         {page === "dictionary" && <DictionaryPage onBack={() => setPage("library")} />}
       </main>
       <TranslationQueuePanel />

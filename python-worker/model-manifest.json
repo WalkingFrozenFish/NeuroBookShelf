@@ -21,6 +21,63 @@
       ]
     },
     {
+      "id": "translation-ru-en",
+      "target": "ru-en",
+      "name": "Russian → English",
+      "archive": {
+        "url": "https://data.argosopentech.com/argospm/v1/translate-ru_en-1_9.argosmodel",
+        "sha256": "e9ba8bf722d10a4a4c39f74289d5938fd47eac08dbe4ed0afd22d89445a5c3ac",
+        "size": 156239112,
+        "name": "translate-ru_en-1_9.argosmodel"
+      },
+      "required": [
+        "model.bin",
+        "config.json",
+        "shared_vocabulary.json",
+        "sentencepiece.model",
+        "README.md",
+        "metadata.json"
+      ]
+    },
+    {
+      "id": "translation-fr-en",
+      "target": "fr-en",
+      "name": "French → English",
+      "archive": {
+        "url": "https://data.argosopentech.com/argospm/v1/translate-fr_en-1_9.argosmodel",
+        "sha256": "3b3052fee6bb1e8e8e632a26a723eb2a2c7710dfe73ba61ffd9b83e85d4f14c1",
+        "size": 66585033,
+        "name": "translate-fr_en-1_9.argosmodel"
+      },
+      "required": [
+        "model.bin",
+        "config.json",
+        "shared_vocabulary.json",
+        "sentencepiece.model",
+        "README.md",
+        "metadata.json"
+      ]
+    },
+    {
+      "id": "translation-en-fr",
+      "target": "en-fr",
+      "name": "English → French",
+      "archive": {
+        "url": "https://data.argosopentech.com/argospm/v1/translate-en_fr-1_9.argosmodel",
+        "sha256": "3a65ed83364f4e7b06e30f9dd823db1934899ed3ce839e63f46dc7b09dc797b4",
+        "size": 65472327,
+        "name": "translate-en_fr-1_9.argosmodel"
+      },
+      "required": [
+        "model.bin",
+        "config.json",
+        "shared_vocabulary.json",
+        "sentencepiece.model",
+        "README.md",
+        "metadata.json"
+      ]
+    },
+    {
       "id": "ocr-det",
       "target": "ocr/det",
       "name": "PP-OCRv5_mobile_det",

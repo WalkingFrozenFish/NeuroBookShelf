@@ -761,7 +761,7 @@ mod tests {
         );
         assert_eq!(
             responses[4].error.as_ref().unwrap().code,
-            "UNSUPPORTED_LANGUAGE"
+            "MODEL_MISSING"
         );
         assert_eq!(responses[5].error.as_ref().unwrap().code, "INVALID_PAYLOAD");
         assert_eq!(stderr.matches("translator-ready").count(), 1);

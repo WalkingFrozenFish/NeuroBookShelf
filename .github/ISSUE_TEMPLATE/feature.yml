@@ -1,22 +1,22 @@
-name: Предложение
-description: Предложить улучшение приложения.
+name: Feature request / Предложение
+description: Suggest an improvement / Предложить улучшение.
 title: "[Feature]: "
 labels: [enhancement]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: Какую задачу хотите решить?
-      description: Опишите сценарий использования и что сейчас мешает.
+      label: What problem would this solve? / Какую задачу хотите решить?
+      description: English or Russian. Describe your use case and current obstacle. / Опишите сценарий и что сейчас мешает.
     validations:
       required: true
   - type: textarea
     id: solution
     attributes:
-      label: Предлагаемое поведение
+      label: Proposed behavior / Предлагаемое поведение
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Альтернативы и примеры
+      label: Alternatives and examples / Альтернативы и примеры

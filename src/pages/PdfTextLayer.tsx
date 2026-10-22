@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { TextLayer, type PDFDocumentProxy } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils";
@@ -26,7 +27,7 @@ export function PdfTextLayer({ pdf, pageNumber, viewport, query, activeMatch, on
       layer.current = rendered;
       setReady((value) => value + 1);
     }
-    void render().catch((failure) => { if (!cancelled) onError(`Не удалось загрузить текст страницы: ${errorText(failure)}`); });
+    void render().catch((failure) => { if (!cancelled) onError(t("Не удалось загрузить текст страницы: {0}", [errorText(failure)])); });
     return () => { cancelled = true; rendered?.cancel(); layer.current = null; };
   }, [pdf, pageNumber, viewport, onError]);
 

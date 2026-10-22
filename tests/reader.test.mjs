@@ -1,3 +1,4 @@
+import "./i18n.test.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModule, apiUrl } from './load-module.mjs';
@@ -85,4 +86,32 @@ test('queue continues with no subscribers and publishes saved results to a later
   queue.enqueue(1, 'Book', 1, 1); unsubscribe(); await idle(queue);
   assert.equal(saved.length, 2); assert.equal(queue.getRevision(), 2);
   queue.clearFinished(); assert.deepEqual(queue.getSnapshot(), []);
+});
+
+test('queue captures direction when enqueued and preserves it on retry', async () => {
+  let preferences = { sourceLanguage: 'auto', targetLanguage: 'ru' };
+  let release;
+  const received = [];
+  const { queue } = fixture({
+    getTranslationSettings: async () => ({ ...preferences }),
+    translateText: async (text, source, target) => {
+      received.push([source, target]);
+      if (!release) await new Promise(resolve => { release = resolve; });
+      return { success: false, error: { code: 'TEST', message: 'retry' } };
+    },
+  });
+  queue.enqueue(1, 'Mixed book', 1, 2);
+  while (!release) await new Promise(resolve => setTimeout(resolve, 1));
+  preferences = { sourceLanguage: 'fr', targetLanguage: 'en' };
+  release(); await idle(queue);
+  queue.retry(queue.getSnapshot()[0].id); await idle(queue);
+  assert(received.every(([source, target]) => source === 'auto' && target === 'ru'));
+});
+
+test('already-target fragments remain unchanged without saving redundant overlays', async () => {
+  const { queue, saved } = fixture({ translateText: async () => ok({ translatedText: 'original', alreadyTarget: true, usedModels: [] }) });
+  queue.enqueue(1, 'Book', 1, 1); await idle(queue);
+  assert.equal(saved.length, 0);
+  assert.equal(queue.getSnapshot()[0].skipped, 2);
+  assert.equal(queue.getSnapshot()[0].processed, 2);
 });

@@ -72,7 +72,7 @@ def main():
     run(python, "-s", "-m", "ensurepip")
     run(python, "-s", "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir", "--only-binary", ":all:", "-r", ROOT / "python-worker/requirements.txt", "-c", ROOT / "python-worker/requirements.lock")
     bundle_windows_crt(python_root)
-    for name in ("worker.py", "model_manager.py", "model-manifest.json"):
+    for name in ("worker.py", "model_manager.py", "translation_router.py", "model-manifest.json"):
         shutil.copy2(ROOT / "python-worker" / name, runtime / name)
     shutil.copy2(ROOT / "python-worker/requirements.lock", runtime / "requirements.lock")
     run(python, "-s", ROOT / "scripts/collect_licenses.py", runtime)

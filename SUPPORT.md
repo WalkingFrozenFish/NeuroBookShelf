@@ -1,5 +1,7 @@
 # Помощь
 
+[English](SUPPORT.en.md) · **Русский**
+
 - Скачать приложение: [последний релиз](https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest).
 - Установка, модели, portable, macOS: [DISTRIBUTION.md](DISTRIBUTION.md).
 - Запуск из исходников: [SETUP.md](SETUP.md).

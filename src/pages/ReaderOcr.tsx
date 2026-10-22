@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import {
   createTranslationBlock,
   ocrDocumentRegion,
@@ -22,12 +23,12 @@ export async function translateSelectedRegion(
   }
   if (!recognized.success || !isOcrResult(recognized.result)) {
     const code = recognized.error?.code ?? "OCR_ERROR";
-    const message = recognized.error?.message ?? "Не удалось распознать текст";
+    const message = recognized.error?.message ?? t("Не удалось распознать текст");
     throw new Error(`${code}: ${message}`);
   }
   const text = recognized.result.text.trim();
   if (text === "") {
-    throw new Error("Текст не найден.");
+    throw new Error(t("Текст не найден."));
   }
 
   onPhase("translating");
@@ -37,12 +38,13 @@ export async function translateSelectedRegion(
   }
   if (!response.success || !isTranslationResult(response.result)) {
     const code = response.error?.code ?? "TRANSLATION_ERROR";
-    const message = response.error?.message ?? "Не удалось перевести текст";
+    const message = response.error?.message ?? t("Не удалось перевести текст");
     throw new Error(`${code}: ${message}`);
   }
+  if (response.result.alreadyTarget) return null;
   const translated = response.result.translatedText.trim();
   if (translated === "") {
-    throw new Error("Перевод пустой.");
+    throw new Error(t("Перевод пустой."));
   }
 
   if (!isCurrent()) {

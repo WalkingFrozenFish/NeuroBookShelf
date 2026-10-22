@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { FormEvent, useEffect, useState } from "react";
 import { confirmAction } from "../confirm";
 import { Icon } from "../icons";
@@ -277,7 +278,7 @@ export function ReaderSidePanel({
         onCancel={() => setEditing(null)}
         onDelete={(id) => {
           void (async () => {
-            if (await confirmAction("Удалить заметку?")) {
+            if (await confirmAction(t("Удалить заметку?"))) {
               void run(() => deleteNote(id));
             }
           })();
@@ -287,16 +288,16 @@ export function ReaderSidePanel({
   }
 
   return (
-    <aside className="reader-side" aria-label="Дополнительная панель">
+    <aside className="reader-side" aria-label={t("Дополнительная панель")}>
       <div
         className="side-resize"
         role="separator"
         aria-orientation="vertical"
-        aria-label="Ширина панели"
+        aria-label={t("Ширина панели")}
         aria-valuemin={300}
         aria-valuemax={500}
         aria-valuenow={width}
-        title="Потяните, чтобы изменить ширину"
+        title={t("Потяните, чтобы изменить ширину")}
         onPointerDown={onResizeStart}
       >
         ⋮
@@ -310,8 +311,7 @@ export function ReaderSidePanel({
           onClick={() => setTab("notes")}
         >
           <Icon name="notes" />
-          Заметки
-        </button>
+          {t("Заметки")}</button>
         <button
           type="button"
           role="tab"
@@ -320,8 +320,7 @@ export function ReaderSidePanel({
           onClick={() => setTab("bookmarks")}
         >
           <Icon name="bookmark" />
-          Закладки
-        </button>
+          {t("Закладки")}</button>
         <button
           type="button"
           role="tab"
@@ -330,8 +329,7 @@ export function ReaderSidePanel({
           onClick={() => setTab("translations")}
         >
           <Icon name="translate" />
-          Переводы
-        </button>
+          {t("Переводы")}</button>
         <button
           type="button"
           role="tab"
@@ -340,8 +338,7 @@ export function ReaderSidePanel({
           onClick={() => setTab("dictionary")}
         >
           <Icon name="dictionary" />
-          Словарь
-        </button>
+          {t("Словарь")}</button>
       </div>
       <div className="side-body" hidden={tab !== "notes"}>
         {error && tab === "notes" ? <p className="error">{error}</p> : null}
@@ -349,13 +346,12 @@ export function ReaderSidePanel({
           <textarea
             data-page-note
             value={pageDraft}
-            placeholder={`Заметка к странице ${pageNumber}`}
+            placeholder={t("Заметка к странице {0}", [pageNumber])}
             disabled={pending}
             onChange={(event) => setPageDraft(event.target.value)}
           />
           <button type="submit" disabled={pending || pageDraft.trim() === ""}>
-            Добавить заметку
-          </button>
+            {t("Добавить заметку")}</button>
         </form>
         <div className="note-groups">
           <section
@@ -371,8 +367,7 @@ export function ReaderSidePanel({
                 data-count={documentNotes.length}
                 onClick={() => toggleNoteGroup("document")}
               >
-                Общие заметки
-              </button>
+                {t("Общие заметки")}</button>
             </div>
             {openNoteGroups.includes("document") ? (
               <div className="note-group-body">
@@ -380,13 +375,12 @@ export function ReaderSidePanel({
                 <form className="side-form note-form" onSubmit={(event) => addNote(event, "document")}>
                   <textarea
                     value={documentDraft}
-                    placeholder="Новая общая заметка"
+                    placeholder={t("Новая общая заметка")}
                     disabled={pending}
                     onChange={(event) => setDocumentDraft(event.target.value)}
                   />
                   <button type="submit" disabled={pending || documentDraft.trim() === ""}>
-                    Добавить общую
-                  </button>
+                    {t("Добавить общую")}</button>
                 </form>
               </div>
             ) : null}
@@ -404,13 +398,12 @@ export function ReaderSidePanel({
                 data-count={pageNoteCount}
                 onClick={() => setPageNotesOpen((current) => !current)}
               >
-                По страницам
-              </button>
+                {t("По страницам")}</button>
             </div>
             {pageNotesOpen ? (
               <div className="note-group-body">
                 {groupedPageNotes.length === 0 ? (
-                  <p className="meta">Заметок на страницах пока нет.</p>
+                  <p className="meta">{t("Заметок на страницах пока нет.")}</p>
                 ) : (
                   groupedPageNotes.map(([groupPage, groupNotes]) => {
                     const open = openNoteGroups.includes(groupPage);
@@ -429,12 +422,11 @@ export function ReaderSidePanel({
                             data-count={groupNotes.length}
                             onClick={() => toggleNoteGroup(groupPage)}
                           >
-                            {`Страница ${groupPage}`}
+                            {t("Страница {0}", [groupPage])}
                           </button>
                           {groupPage === pageNumber ? null : (
                             <button type="button" onClick={() => onOpenPage(groupPage)}>
-                              К странице
-                            </button>
+                              {t("К странице")}</button>
                           )}
                         </div>
                         {open ? <div className="note-group-body">{noteList(groupNotes)}</div> : null}
@@ -452,13 +444,12 @@ export function ReaderSidePanel({
         <form className="side-form bookmark-form" onSubmit={addBookmark}>
           <textarea
             value={label}
-            placeholder="Заметка к закладке, необязательно"
+            placeholder={t("Заметка к закладке, необязательно")}
             disabled={pending}
             onChange={(event) => setLabel(event.target.value)}
           />
           <button type="submit" disabled={pending}>
-            Добавить закладку
-          </button>
+            {t("Добавить закладку")}</button>
         </form>
         <div className="note-groups">
           <section className="note-group" data-bookmark-group="pages" data-bookmark-open={bookmarksOpen ? "1" : "0"}>
@@ -470,13 +461,12 @@ export function ReaderSidePanel({
                 data-count={bookmarks.length}
                 onClick={() => setBookmarksOpen((current) => !current)}
               >
-                По страницам
-              </button>
+                {t("По страницам")}</button>
             </div>
             {bookmarksOpen ? (
               <div className="note-group-body">
                 {groupedBookmarks.length === 0 ? (
-                  <p className="meta">Закладок пока нет.</p>
+                  <p className="meta">{t("Закладок пока нет.")}</p>
                 ) : (
                   groupedBookmarks.map(([groupPage, groupBookmarks]) => {
                     const open = openBookmarkPages.includes(groupPage);
@@ -495,12 +485,11 @@ export function ReaderSidePanel({
                             data-count={groupBookmarks.length}
                             onClick={() => toggleBookmarkPage(groupPage)}
                           >
-                            {`Страница ${groupPage}`}
+                            {t("Страница {0}", [groupPage])}
                           </button>
                           {groupPage === pageNumber ? null : (
                             <button type="button" onClick={() => onOpenPage(groupPage)}>
-                              К странице
-                            </button>
+                              {t("К странице")}</button>
                           )}
                         </div>
                         {open ? (
@@ -519,25 +508,25 @@ export function ReaderSidePanel({
                                     onClick={() => onOpenPage(bookmark.pageNumber)}
                                   >
                                     <span className="bookmark-text">
-                                      {bookmark.label || `Страница ${bookmark.pageNumber}`}
+                                      {bookmark.label || t("Страница {0}", [bookmark.pageNumber])}
                                     </span>
                                   </button>
                                   <div className="bookmark-actions">
                                     <button
                                       type="button"
                                       className="icon-button"
-                                      aria-label="Удалить"
+                                      aria-label={t("Удалить")}
                                       disabled={pending}
                                       onClick={() => {
                                         void (async () => {
-                                          if (await confirmAction("Удалить закладку?")) {
+                                          if (await confirmAction(t("Удалить закладку?"))) {
                                             void run(() => deleteBookmark(bookmark.id));
                                           }
                                         })();
                                       }}
                                     >
                                       <Icon name="trash" />
-                                      <span className="sr-only">Удалить</span>
+                                      <span className="sr-only">{t("Удалить")}</span>
                                     </button>
                                   </div>
                                 </li>
@@ -557,7 +546,7 @@ export function ReaderSidePanel({
       <div className="side-body" hidden={tab !== "translations"}>
         {blockError ? <p className="error">{blockError}</p> : null}
         {blocks.length === 0 ? (
-          <p className="meta">На этой странице переводов нет.</p>
+          <p className="meta">{t("На этой странице переводов нет.")}</p>
         ) : (
           <ul className="side-list">
             {blocks.map((block) => {
@@ -572,7 +561,7 @@ export function ReaderSidePanel({
                     type="button"
                     className="translation-menu-button"
                     data-translation-menu-button
-                    aria-label="Действия перевода"
+                    aria-label={t("Действия перевода")}
                     aria-expanded={translationMenu === block.id}
                     disabled={blockPending}
                     onClick={() => setTranslationMenu((current) => (current === block.id ? null : block.id))}
@@ -590,8 +579,7 @@ export function ReaderSidePanel({
                           addBlockToDictionary("document", block);
                         }}
                       >
-                        В словарь книги
-                      </button>
+                        {t("В словарь книги")}</button>
                       <button
                         type="button"
                         role="menuitem"
@@ -601,8 +589,7 @@ export function ReaderSidePanel({
                           addBlockToDictionary("global", block);
                         }}
                       >
-                        В общий словарь
-                      </button>
+                        {t("В общий словарь")}</button>
                       <button
                         type="button"
                         role="menuitem"
@@ -611,7 +598,7 @@ export function ReaderSidePanel({
                         onClick={() => {
                           setTranslationMenu(null);
                           void (async () => {
-                            if (await confirmAction("Удалить перевод?")) {
+                            if (await confirmAction(t("Удалить перевод?"))) {
                               setBlockPending(true);
                               setBlockError("");
                               void deleteTranslationBlock(block.id)
@@ -626,8 +613,7 @@ export function ReaderSidePanel({
                           })();
                         }}
                       >
-                        Удалить
-                      </button>
+                        {t("Удалить")}</button>
                     </div>
                   ) : null}
                   <button
@@ -653,8 +639,7 @@ export function ReaderSidePanel({
                       }}
                     >
                       <Icon name="overlay" />
-                      Показать
-                    </button>
+                      {t("Показать")}</button>
                     {block.ocrText.length > 140 || block.translatedText.length > 140 ? (
                       <button
                         type="button"
@@ -666,7 +651,7 @@ export function ReaderSidePanel({
                           )
                         }
                       >
-                        {open ? "Свернуть" : "Развернуть"}
+                        {open ? t("Свернуть") : t("Развернуть")}
                       </button>
                     ) : null}
                   </div>
@@ -708,7 +693,7 @@ function NoteList({
   onDelete: (id: number) => void;
 }) {
   if (notes.length === 0) {
-    return <p className="meta">Заметок пока нет.</p>;
+    return <p className="meta">{t("Заметок пока нет.")}</p>;
   }
   return (
     <ul className="side-list">
@@ -730,11 +715,9 @@ function NoteList({
                 />
                 <div className="actions">
                   <button type="submit" disabled={pending || editing.body.trim() === ""}>
-                    Сохранить
-                  </button>
+                    {t("Сохранить")}</button>
                   <button type="button" disabled={pending} onClick={onCancel}>
-                    Отмена
-                  </button>
+                    {t("Отмена")}</button>
                 </div>
               </form>
             ) : (
@@ -744,24 +727,24 @@ function NoteList({
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label="Изменить"
+                    aria-label={t("Изменить")}
                     disabled={pending}
                     onClick={() =>
                       onEdit({ id: note.id, pageNumber: note.pageNumber, body: note.body })
                     }
                   >
                     <Icon name="edit" />
-                    <span className="sr-only">Изменить</span>
+                    <span className="sr-only">{t("Изменить")}</span>
                   </button>
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label="Удалить"
+                    aria-label={t("Удалить")}
                     disabled={pending}
                     onClick={() => onDelete(note.id)}
                   >
                     <Icon name="trash" />
-                    <span className="sr-only">Удалить</span>
+                    <span className="sr-only">{t("Удалить")}</span>
                   </button>
                 </div>
               </>

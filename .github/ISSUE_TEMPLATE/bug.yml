@@ -1,40 +1,40 @@
-name: Ошибка
-description: Сообщить о воспроизводимой проблеме.
+name: Bug / Ошибка
+description: Report a reproducible problem / Сообщить об ошибке.
 title: "[Bug]: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Не прикладывайте личные PDF, базу библиотеки, ключи и токены. Для проблемы с документом по возможности создайте небольшой обезличенный пример.
+      value: English and Russian are welcome. Do not attach private PDFs, library databases, keys or tokens. Use a small anonymous sample. / Можно писать по-русски. Не прикладывайте личные PDF, базу, ключи или токены.
   - type: input
     id: version
     attributes:
-      label: Версия приложения
-      placeholder: "0.1.0, Windows setup / portable / macOS DMG / из исходников"
+      label: App version / Версия приложения
+      placeholder: "0.1.0, Windows setup / portable / macOS DMG / source build"
     validations:
       required: true
   - type: input
     id: system
     attributes:
-      label: ОС и архитектура
-      placeholder: "Windows 11 x64 или macOS 15 Apple Silicon"
+      label: OS and architecture / ОС и архитектура
+      placeholder: "Windows 11 x64 / macOS 15 Apple Silicon"
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Шаги воспроизведения
-      description: Что нужно сделать после запуска, чтобы получить ошибку?
+      label: Steps to reproduce / Шаги воспроизведения
+      description: What should we do after launch to reproduce this? / Как воспроизвести после запуска?
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Ожидаемое и фактическое поведение
+      label: Expected and actual behavior / Ожидаемое и фактическое поведение
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: Дополнительные сведения
-      description: Обезличенные сообщения ошибок, скриншот, состояние загрузки моделей. Для PDF укажите, текстовый он или скан.
+      label: Additional details / Дополнительные сведения
+      description: Anonymous errors, screenshots or model download status. Is the PDF a scan or does it contain text? / Ошибки, скриншоты, состояние моделей. PDF текстовый или скан?

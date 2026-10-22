@@ -1,6 +1,8 @@
+import { locale, t } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { AnnotationMode, type RenderTask } from "pdfjs-dist";
 import { Icon } from "../icons";
+import { EmptyState } from "../EmptyState";
 import {
   DocumentRecord,
   errorText,
@@ -14,7 +16,7 @@ import {
 } from "../libraryApi";
 import { openPdf } from "../pdfSetup";
 
-export function TrashPage() {
+export function TrashPage({ onLibraryChanged }: { onLibraryChanged?: () => Promise<void> }) {
   const [documents, setDocuments] = useState<DocumentRecord[] | null>(null);
   const [shelves, setShelves] = useState<NamedRecord[]>([]);
   const [tags, setTags] = useState<NamedRecord[]>([]);
@@ -72,11 +74,13 @@ export function TrashPage() {
     try {
       await action();
       await reload();
+      await onLibraryChanged?.();
       return true;
     } catch (actionError: unknown) {
       setError(errorText(actionError));
       try {
         await reload();
+        await onLibraryChanged?.();
       } catch {
         // На экране остаётся ошибка действия.
       }
@@ -153,21 +157,22 @@ export function TrashPage() {
   }
 
   return (
-    <section className="library">
+    <section className="library trash-browser">
       <header className="trash-toolbar">
-        <h1>Корзина</h1>
+        <h1>{t("Корзина")}</h1>
         {documents && documents.length > 0 ? (
           <label className="library-search">
-            <span className="sr-only">Поиск</span>
+            <span className="sr-only">{t("Поиск")}</span>
             <input
               type="search"
               value={query}
-              placeholder="Поиск"
+              placeholder={t("Поиск")}
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
         ) : null}
       </header>
+      <p className="trash-description">{t("Здесь можно восстановить книги или удалить их навсегда.")}</p>
       {error ? <p className="error">{error}</p> : null}
       {documents && documents.length > 0 && (visible.length > 0 || selected.size > 0) ? (
         <div className="trash-select-bar">
@@ -180,32 +185,32 @@ export function TrashPage() {
                 disabled={pending || visible.length === 0}
                 onChange={toggleVisible}
               />
-              <span>Выбрать все</span>
+              <span>{t("Выбрать все")}</span>
             </label>
-            {selected.size > 0 ? <span className="trash-select-count">Выбрано: {selected.size}</span> : null}
+            {selected.size > 0 ? <span className="trash-select-count">{t("Выбрано:")}{" "}{selected.size}</span> : null}
             {selected.size > 0 ? (
               <div className="trash-actions trash-select-actions">
                 <button
                   type="button"
                   className="trash-restore"
-                  aria-label="Восстановить"
-                  title="Восстановить"
+                  aria-label={t("Восстановить")}
+                  title={t("Восстановить")}
                   disabled={pending}
                   onClick={() => setConfirm({ action: "restore", ids: [...selected] })}
                 >
                   <Icon name="restore" />
-                  <span className="sr-only">Восстановить</span>
+                  <span className="sr-only">{t("Восстановить")}</span>
                 </button>
                 <button
                   type="button"
                   className="trash-delete"
-                  aria-label="Удалить"
-                  title="Удалить"
+                  aria-label={t("Удалить")}
+                  title={t("Удалить")}
                   disabled={pending}
                   onClick={() => setConfirm({ action: "purge", ids: [...selected] })}
                 >
                   <Icon name="trash" />
-                  <span className="sr-only">Удалить</span>
+                  <span className="sr-only">{t("Удалить")}</span>
                 </button>
               </div>
             ) : null}
@@ -213,11 +218,14 @@ export function TrashPage() {
         </div>
       ) : null}
       {documents === null ? (
-        <p>Загрузка корзины…</p>
+        <p>{t("Загрузка корзины…")}</p>
       ) : documents.length === 0 ? (
-        <p>Удалённых документов нет.</p>
+        <EmptyState icon="trash" title={t("Удалённых документов нет.")}>{t("Книги, перемещённые в корзину, появятся здесь. Их можно будет восстановить.")}</EmptyState>
       ) : visible.length === 0 ? (
-        <p>Ничего не найдено.</p>
+        <EmptyState icon="search" title={t("Ничего не найдено.")}
+          action={<button type="button" onClick={() => setQuery("")}>{t("Сбросить фильтры")}</button>}>
+          {t("Попробуйте другой запрос или сбросьте фильтры.")}
+        </EmptyState>
       ) : (
         <ul className="trash-list">
           {visible.map((document) => (
@@ -238,7 +246,7 @@ export function TrashPage() {
       {confirm && documents ? (
         <TrashConfirm
           action={confirm.action}
-          titles={confirm.ids.map((id) => documents.find((item) => item.id === id)?.title ?? "книгу")}
+          titles={confirm.ids.map((id) => documents.find((item) => item.id === id)?.title ?? t("книгу"))}
           pending={pending}
           onClose={() => {
             if (!pending) {
@@ -266,24 +274,24 @@ function TrashConfirm({
   onConfirm: () => void;
 }) {
   const many = titles.length > 1;
-  const name = titles[0] ?? "книгу";
+  const name = titles[0] ?? t("книгу");
   const copy =
     action === "restore"
       ? {
-          title: "Восстановить",
+          title: t("Восстановить"),
           text: many
-            ? `Выбранные книги (${titles.length}) снова появятся в библиотеке.`
-            : `«${name}» снова появится в библиотеке.`,
-          question: many ? "Точно восстановить выбранные книги?" : "Точно восстановить эту книгу?",
-          confirm: "Да, восстановить",
+            ? t("Выбранные книги ({0}) снова появятся в библиотеке.", [titles.length])
+            : t("«{0}» снова появится в библиотеке.", [name]),
+          question: many ? t("Точно восстановить выбранные книги?") : t("Точно восстановить эту книгу?"),
+          confirm: t("Да, восстановить"),
         }
       : {
-          title: "Удалить навсегда",
+          title: t("Удалить навсегда"),
           text: many
-            ? "Файлы PDF будут удалены с диска, а записи исчезнут из базы. Это нельзя отменить."
-            : `Файл PDF «${name}» будет удалён с диска, а запись исчезнет из базы. Это нельзя отменить.`,
-          question: many ? `Точно удалить выбранные книги (${titles.length})?` : "Точно удалить эту книгу?",
-          confirm: "Да, удалить",
+            ? t("Файлы PDF будут удалены с диска, а записи исчезнут из базы. Это нельзя отменить.")
+            : t("Файл PDF «{0}» будет удалён с диска, а запись исчезнет из базы. Это нельзя отменить.", [name]),
+          question: many ? t("Точно удалить выбранные книги ({0})?", [titles.length]) : t("Точно удалить эту книгу?"),
+          confirm: t("Да, удалить"),
         };
 
   useEffect(() => {
@@ -310,8 +318,7 @@ function TrashConfirm({
         <p>{copy.question}</p>
         <div className="actions">
           <button type="button" autoFocus disabled={pending} onClick={onClose}>
-            Нет, оставить
-          </button>
+            {t("Нет, оставить")}</button>
           <button
             type="button"
             className={action === "purge" ? "danger" : "primary"}
@@ -388,14 +395,14 @@ function TrashCard({
             type="checkbox"
             checked={selected}
             disabled={pending}
-            aria-label={`Выбрать «${document.title}»`}
+            aria-label={t("Выбрать «{0}»", [document.title])}
             onChange={onToggle}
           />
         </label>
         {document.path ? (
           <TrashCover documentId={document.id} onAuthor={setAuthor} />
         ) : (
-          <span className="cover-fallback">Нет PDF</span>
+          <span className="cover-fallback">{t("Нет PDF")}</span>
         )}
       </div>
       <div className="trash-body">
@@ -406,25 +413,25 @@ function TrashCard({
                 {document.title}
               </strong>
               <div className="trash-author">
-                {author === undefined ? "Автор…" : author ?? "Автор не указан"}
+                {author === undefined ? t("Автор…") : author ?? t("Автор не указан")}
               </div>
             </div>
           </div>
-          <ChipRow label="Теги" items={tags} ids={document.tagIds} colorful />
-          <ChipRow label="Полки" items={shelves} ids={document.shelfIds} colorful={false} />
+          <ChipRow label={t("Теги")} items={tags} ids={document.tagIds} colorful />
+          <ChipRow label={t("Полки")} items={shelves} ids={document.shelfIds} colorful={false} />
           <dl className="trash-facts">
             <div>
-              <dt>Вес</dt>
+              <dt>{t("Вес")}</dt>
               <dd>{formatSize(document.fileSize)}</dd>
             </div>
             <div>
-              <dt>Удалён</dt>
+              <dt>{t("Удалён")}</dt>
               <dd>{formatDeleted(document.deletedAt)}</dd>
             </div>
             <div>
-              <dt>Файл</dt>
+              <dt>{t("Файл")}</dt>
               <dd title={document.originalFilename ?? undefined}>
-                {document.originalFilename ?? "Без файла"}
+                {document.originalFilename ?? t("Без файла")}
               </dd>
             </div>
           </dl>
@@ -433,24 +440,24 @@ function TrashCard({
           <button
             type="button"
             className="trash-restore"
-            aria-label="Восстановить"
-            title="Восстановить"
+            aria-label={t("Восстановить")}
+            title={t("Восстановить")}
             disabled={pending}
             onClick={onRestore}
           >
             <Icon name="restore" />
-            <span className="sr-only">Восстановить</span>
+            <span className="sr-only">{t("Восстановить")}</span>
           </button>
           <button
             type="button"
             className="trash-delete"
-            aria-label="Удалить"
-            title="Удалить"
+            aria-label={t("Удалить")}
+            title={t("Удалить")}
             disabled={pending}
             onClick={onPurge}
           >
             <Icon name="trash" />
-            <span className="sr-only">Удалить</span>
+            <span className="sr-only">{t("Удалить")}</span>
           </button>
         </div>
       </div>
@@ -506,7 +513,7 @@ function ChipRow({
     <div className="trash-group">
       <span className="trash-kicker">{label}</span>
       <div className="trash-chips">
-        {linked.length === 0 ? <span className="trash-empty">нет</span> : null}
+        {linked.length === 0 ? <span className="trash-empty">{t("нет")}</span> : null}
         {linked.map((item) =>
           colorful ? (
             <span key={item.id} className={`tag-chip tone-${item.id % 6}`}>
@@ -628,29 +635,29 @@ function toBytes(payload: ArrayBuffer | number[] | Uint8Array): Uint8Array {
 
 function formatSize(size: number | null): string {
   if (size === null) {
-    return "неизвестен";
+    return t("неизвестен");
   }
   const megabytes = size / (1024 * 1024);
   if (megabytes > 0 && megabytes < 0.01) {
-    return "< 0,01 МБ";
+    return t("< 0,01 МБ");
   }
   const digits = megabytes >= 10 ? 1 : 2;
-  return `${megabytes.toLocaleString("ru-RU", {
+  return t("{0} МБ", [megabytes.toLocaleString(locale(), {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
-  })} МБ`;
+  })]);
 }
 
 function formatDeleted(value: string | null): string {
   if (!value) {
-    return "неизвестно";
+    return t("неизвестно");
   }
   const iso = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return date.toLocaleString("ru-RU", {
+  return date.toLocaleString(locale(), {
     day: "numeric",
     month: "long",
     year: "numeric",

@@ -1,13 +1,13 @@
 # Настройки GitHub
 
-Состояние аудита на 20 октября 2026 года: основная ветка `master`, описание и темы отсутствовали, ветка не была защищена. Публичный релиз `v0.1.0` опубликован. PR #1 содержит подготовленные изменения и ещё не объединён.
+Состояние аудита на 20 октября 2026 года: основная ветка `master`, описание и темы отсутствовали, ветка не была защищена. Это исторический снимок до публикации 0.2.0; PR #1 объединён 22 октября 2026 года.
 
 Настройки ниже применены с разрешения владельца и проверены через GitHub API 20 октября 2026 года. Основная ветка защищена, squash merge и очистка веток включены, приватные отчёты об уязвимостях включены.
 
 ## About
 
-- Description: `Offline PDF library with local OCR, English-to-Russian translation, notes and portable desktop builds.`
-- Website: `https://github.com/WalkingFrozenFish/NeuroBookShelf/releases/latest`.
+- Description: `Offline PDF library with local OCR and translation. Windows & macOS. Русский / English.`
+- Website: `https://walkingfrozenfish.github.io/NeuroBookShelf/`.
 - Topics: `pdf-reader`, `tauri`, `react`, `rust`, `python`, `ocr`, `offline`, `translation`, `desktop-app`, `windows`, `macos`, `portable`.
 
 ## Pull Requests
@@ -35,4 +35,4 @@
 - Private vulnerability reporting: включено; ссылка конфиденциального отчёта из SECURITY.md доступна.
 - Issues: включены; формы хранятся в `.github/ISSUE_TEMPLATE/`.
 - Dependabot: конфигурация `.github/dependabot.yml` начнёт работать после попадания в основную ветку.
-- README, шаблоны Issues/PR, CODEOWNERS и прочие community-файлы появятся на главной странице после merge PR #1. Файлы только в рабочей ветке не меняют главную страницу основной ветки.
+- README, шаблоны Issues/PR, CODEOWNERS и прочие community-файлы опубликованы через PR. GitHub Pages использует Actions и публикует каталог `site/`.

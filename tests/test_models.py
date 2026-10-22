@@ -68,6 +68,47 @@ class ModelsTest(unittest.TestCase):
         with patch.object(manager, 'manifest', return_value=manifest), patch.object(manager.urllib.request, 'urlopen', return_value=Response(data)):
             self.assertFalse(manager.install_models()['success'])
         self.assertFalse((self.root / 'en-ru/ready.json').exists())
+    def test_cancel_during_download_does_not_install_and_can_retry(self):
+        data = b'model data'
+        entry = self.entry(data)
+        manifest = {'version': 1, 'groups': [{'id': 'translation', 'target': 'en-ru', 'files': [entry]}]}
+        root = self.root
+        class CancellingResponse(Response):
+            def read1(self, size):
+                chunk = super().read(size)
+                (root / 'cancel-download').write_text('cancel')
+                return chunk
+        with patch.object(manager, 'manifest', return_value=manifest), patch.object(manager.urllib.request, 'urlopen', return_value=CancellingResponse(data)):
+            result = manager.install_models('en-ru')
+        self.assertEqual(result['error']['code'], 'DOWNLOAD_CANCELLED')
+        self.assertEqual(json.loads((self.root / 'download-progress.json').read_text())['phase'], 'cancelled')
+        self.assertFalse((self.root / 'en-ru/ready.json').exists())
+        self.assertEqual(list((self.root / '.downloads').glob('*.part')), [])
+        (self.root / 'cancel-download').unlink()
+        with patch.object(manager, 'manifest', return_value=manifest), patch.object(manager.urllib.request, 'urlopen', return_value=Response(data)):
+            self.assertTrue(manager.install_models('en-ru')['success'])
+        self.assertEqual((self.root / 'en-ru/weights.bin').read_bytes(), data)
+
+    def test_install_selected_pair_does_not_download_other_pairs(self):
+        entry = self.entry(b'french')
+        other = self.entry(b'russian', 'other.bin')
+        manifest = {'version': 1, 'groups': [
+            {'id': 'translation', 'target': 'en-ru', 'archive': other, 'required': ['model.bin']},
+            {'id': 'fr-en', 'target': 'fr-en', 'files': [entry]},
+        ]}
+        with patch.object(manager, 'manifest', return_value=manifest), patch.object(manager.urllib.request, 'urlopen', return_value=Response(b'french')) as request:
+            self.assertTrue(manager.install_models('fr-en')['success'])
+            self.assertEqual(request.call_count, 1)
+        self.assertTrue((self.root / 'fr-en/ready.json').exists())
+        self.assertFalse((self.root / 'en-ru').exists())
+
+    def test_active_pair_rejects_unknown_or_malformed_selection(self):
+        manifest = {'groups': [{'target': 'en-ru', 'archive': {}}, {'target': 'fr-en', 'archive': {'url': 'https://example.test'}}]}
+        for value, expected in [({'pair': 'fr-en'}, 'fr-en'), ({'pair': '../outside'}, 'en-ru'), (None, 'en-ru')]:
+            (self.root / 'translation-choice.json').write_text(json.dumps(value))
+            with patch.object(manager, 'manifest', return_value=manifest):
+                self.assertEqual(manager.active_pair(), expected)
+
     def test_insecure_source_rejected(self):
         entry = self.entry(b'x')
         entry['url'] = 'http://models.example.test/x'

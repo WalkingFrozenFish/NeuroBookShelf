@@ -1,11 +1,11 @@
-## Что меняется и зачем
+## What changes and why / Что меняется и зачем
 
-Проблема, результат и связанная задача (например, Closes #123).
+Describe the problem, resulting behavior and linked issue (e.g. Closes #123). English or Russian is welcome.
 
-## Проверка
+## Validation / Проверка
 
-Какие команды запускались и какие сценарии проверены вручную? Для интерфейса приложите скриншот без личных документов.
+List checks and manual scenarios. For UI changes, include a screenshot without private documents.
 
-## Данные и совместимость
+## Data and compatibility / Данные и совместимость
 
-Нужны ли миграции, новая загрузка моделей, изменение формата библиотеки или действия при обновлении? Если нет — укажите «Не требуется».
+Does this require migrations, model downloads, library format changes or update instructions? If none, say so.
