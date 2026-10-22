@@ -1,0 +1,11 @@
+name: Вопрос
+description: Спросить об использовании или разработке.
+title: "[Question]: "
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Вопрос
+      description: Укажите версию приложения и ОС, если вопрос связан с запуском.
+    validations:
+      required: true

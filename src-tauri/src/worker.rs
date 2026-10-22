@@ -1,12 +1,57 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::{mpsc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+
+struct RuntimePaths {
+    script: PathBuf,
+    python: Option<PathBuf>,
+    models: PathBuf,
+    bundled: bool,
+}
+
+static RUNTIME: OnceLock<RuntimePaths> = OnceLock::new();
+
+pub fn initialize(resources: PathBuf, models: PathBuf) {
+    let runtime = resources.join("runtime");
+    let bundled = runtime.join("worker.py").is_file();
+    let python = if cfg!(windows) {
+        runtime.join("python/python.exe")
+    } else {
+        runtime.join("python/bin/python3")
+    };
+    let script = if bundled || !cfg!(debug_assertions) {
+        runtime.join("worker.py")
+    } else {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../python-worker/worker.py")
+    };
+    let _ = RUNTIME.set(RuntimePaths {
+        script,
+        python: (bundled || !cfg!(debug_assertions)).then_some(python),
+        models,
+        bundled,
+    });
+}
+
+pub fn models_root() -> PathBuf {
+    RUNTIME
+        .get()
+        .map(|paths| paths.models.clone())
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../python-worker/models")
+        })
+}
+
+pub fn runtime_available() -> bool {
+    RUNTIME
+        .get()
+        .is_some_and(|paths| paths.python.as_ref().is_some_and(|python| python.is_file()))
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkerResponse {
@@ -31,7 +76,10 @@ enum WorkerFailure {
 
 #[cfg(test)]
 pub fn call(command: &str, payload: Option<&str>) -> Result<WorkerResponse, String> {
-    call_value(command, payload.map(|value| Value::String(value.to_string())))
+    call_value(
+        command,
+        payload.map(|value| Value::String(value.to_string())),
+    )
 }
 
 pub fn call_value(command: &str, payload: Option<Value>) -> Result<WorkerResponse, String> {
@@ -40,7 +88,9 @@ pub fn call_value(command: &str, payload: Option<Value>) -> Result<WorkerRespons
     if let Some(payload) = payload {
         request.insert("payload".to_string(), payload);
     }
-    let timeout = if command == "ocr_region"
+    let timeout = if command == "install_models" {
+        Duration::from_secs(3600)
+    } else if command == "ocr_region"
         || command == "ocr_page"
         || command == "translate"
         || command == "warm_translator"
@@ -71,7 +121,12 @@ fn call_line(line: &str, timeout: Duration) -> Result<WorkerResponse, String> {
 }
 
 fn script_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../python-worker/worker.py")
+    RUNTIME
+        .get()
+        .map(|paths| paths.script.clone())
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../python-worker/worker.py")
+        })
 }
 
 struct Session {
@@ -100,7 +155,9 @@ fn session_call(
     }
     let wrote = {
         let current = session.as_mut().unwrap();
-        writeln!(current.stdin, "{line}").and_then(|_| current.stdin.flush()).is_ok()
+        writeln!(current.stdin, "{line}")
+            .and_then(|_| current.stdin.flush())
+            .is_ok()
     };
     if !wrote {
         return Err(WorkerFailure::Failed(close_session(
@@ -228,6 +285,14 @@ fn close_session(session: &mut Option<Session>, reason: &str) -> String {
 }
 
 fn selected_program() -> Result<Vec<String>, String> {
+    if let Some(paths) = RUNTIME.get() {
+        if let Some(python) = &paths.python {
+            if !python.is_file() {
+                return Err("Встроенный Python не найден. Переустановите приложение.".to_string());
+            }
+            return Ok(vec![python.display().to_string()]);
+        }
+    }
     static CACHE: OnceLock<Mutex<Option<Vec<String>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(None));
     let mut cache = cache
@@ -331,6 +396,22 @@ fn spawn_worker(program: &[String], script: &PathBuf) -> Result<Child, WorkerFai
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(paths) = RUNTIME.get() {
+        command.env("LLR_MODEL_ROOT", &paths.models);
+        if paths.bundled {
+            command
+                .env("LLR_BUNDLED_RUNTIME", "1")
+                .env("PYTHONNOUSERSITE", "1")
+                .env("PYTHONDONTWRITEBYTECODE", "1")
+                .env_remove("PYTHONHOME")
+                .env_remove("PYTHONPATH");
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW, worker still uses pipes.
+    }
     command.spawn().map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             WorkerFailure::NotFound(executable.clone())
@@ -341,7 +422,11 @@ fn spawn_worker(program: &[String], script: &PathBuf) -> Result<Child, WorkerFai
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-fn exchange(program: &[String], script: &PathBuf, line: &str) -> Result<WorkerResponse, WorkerFailure> {
+fn exchange(
+    program: &[String],
+    script: &PathBuf,
+    line: &str,
+) -> Result<WorkerResponse, WorkerFailure> {
     let mut child = spawn_worker(program, script)?;
 
     let mut stdin = child.stdin.take().ok_or_else(|| {
@@ -428,7 +513,9 @@ fn failure_message(reason: &str, stderr_text: &str) -> String {
     let stderr_text = stderr_text
         .lines()
         .map(str::trim)
-        .filter(|line| !line.is_empty() && *line != "ocr-engine-ready" && *line != "translator-ready")
+        .filter(|line| {
+            !line.is_empty() && *line != "ocr-engine-ready" && *line != "translator-ready"
+        })
         .collect::<Vec<_>>()
         .join(" ");
     if stderr_text.is_empty() {
@@ -504,6 +591,7 @@ mod tests {
         let text_path = dir.join("text.pdf");
         let before = std::fs::read(&text_path).unwrap();
         let page = analyze(&text_path, 1);
+        assert!(page.success, "{page:?}");
         let result = page.result.unwrap();
         assert_eq!(result["hasTextLayer"], Value::Bool(true));
         assert_eq!(result["pageNumber"], Value::from(1));
@@ -535,13 +623,22 @@ mod tests {
         assert!(scan_result["blocks"].as_array().unwrap().is_empty());
 
         assert_eq!(analyze(&text_path, 0).error.unwrap().code, "INVALID_PAGE");
-        assert_eq!(analyze(&text_path, 9).error.unwrap().code, "PAGE_OUT_OF_RANGE");
+        assert_eq!(
+            analyze(&text_path, 9).error.unwrap().code,
+            "PAGE_OUT_OF_RANGE"
+        );
         assert_eq!(
             analyze(&dir.join("missing.pdf"), 1).error.unwrap().code,
             "FILE_NOT_FOUND"
         );
-        assert_eq!(analyze(&dir.join("broken.pdf"), 1).error.unwrap().code, "INVALID_PDF");
-        assert_eq!(analyze(&dir.join("locked.pdf"), 1).error.unwrap().code, "PDF_ERROR");
+        assert_eq!(
+            analyze(&dir.join("broken.pdf"), 1).error.unwrap().code,
+            "INVALID_PDF"
+        );
+        assert_eq!(
+            analyze(&dir.join("locked.pdf"), 1).error.unwrap().code,
+            "PDF_ERROR"
+        );
     }
 
     fn analyze(path: &std::path::Path, page_number: i64) -> WorkerResponse {
@@ -590,13 +687,18 @@ mod tests {
         let (responses, stderr) = talk(&requests);
         assert_eq!(responses[0].error.as_ref().unwrap().code, "FILE_NOT_FOUND");
         assert_eq!(responses[1].error.as_ref().unwrap().code, "INVALID_REGION");
-        assert_eq!(responses[2].error.as_ref().unwrap().code, "PAGE_OUT_OF_RANGE");
+        assert_eq!(
+            responses[2].error.as_ref().unwrap().code,
+            "PAGE_OUT_OF_RANGE"
+        );
         let both = responses[3].result.as_ref().unwrap();
         let both_text = both["text"].as_str().unwrap();
         assert!(both_text.contains("Hello OCR"), "{both_text}");
         assert!(both_text.contains("Small note"), "{both_text}");
         assert!(both["blocks"].as_array().unwrap().len() >= 2);
-        let small = responses[4].result.as_ref().unwrap()["text"].as_str().unwrap();
+        let small = responses[4].result.as_ref().unwrap()["text"]
+            .as_str()
+            .unwrap();
         assert!(small.contains("Small note"), "{small}");
         assert!(!small.contains("Hello"), "{small}");
         let blank = responses[5].result.as_ref().unwrap();
@@ -646,14 +748,21 @@ mod tests {
                 .contains("Hello OCR")
         );
         assert_eq!(
-            responses[2].result.as_ref().unwrap()["translatedText"].as_str().unwrap(),
+            responses[2].result.as_ref().unwrap()["translatedText"]
+                .as_str()
+                .unwrap(),
             "Лиса стоит возле дерева."
         );
         assert_eq!(
-            responses[3].result.as_ref().unwrap()["translatedText"].as_str().unwrap(),
+            responses[3].result.as_ref().unwrap()["translatedText"]
+                .as_str()
+                .unwrap(),
             "Привет."
         );
-        assert_eq!(responses[4].error.as_ref().unwrap().code, "UNSUPPORTED_LANGUAGE");
+        assert_eq!(
+            responses[4].error.as_ref().unwrap().code,
+            "UNSUPPORTED_LANGUAGE"
+        );
         assert_eq!(responses[5].error.as_ref().unwrap().code, "INVALID_PAYLOAD");
         assert_eq!(stderr.matches("translator-ready").count(), 1);
         assert_eq!(stderr.matches("ocr-engine-ready").count(), 1);
@@ -677,7 +786,14 @@ mod tests {
         .to_string()
     }
 
-    fn request(path: &std::path::Path, page: i64, x: f64, y: f64, width: f64, height: f64) -> String {
+    fn request(
+        path: &std::path::Path,
+        page: i64,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    ) -> String {
         serde_json::json!({
             "command": "ocr_region",
             "payload": {
@@ -724,7 +840,10 @@ mod tests {
             .filter(|line| line.starts_with('{'))
             .map(|line| serde_json::from_str(line).unwrap())
             .collect();
-        (responses, String::from_utf8_lossy(&output.stderr).to_string())
+        (
+            responses,
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        )
     }
 
     fn interpreter() -> Vec<String> {

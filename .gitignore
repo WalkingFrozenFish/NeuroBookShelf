@@ -11,6 +11,9 @@ node_modules
 __pycache__/
 *.pyc
 .venv/
+.distribution-cache/
+bundle/
+src-tauri/tauri.release.conf.json
 venv/
 .env
 .env.*
@@ -19,6 +22,9 @@ python-worker/models/
 *.pdf
 dist
 dist-ssr
+tests/*.png
+public/pdfjs-wasm
+public/pdfjs-standard-fonts
 *.local
 
 # Editor directories and files

@@ -1,6 +1,8 @@
-# Установка Local Library Reader
+# Окружение разработчика NeuroBookShelf
 
 Инструкция для разработчика, который клонирует репозиторий и запускает development-версию локально.
+
+Для установки готовой версии без инструментов разработчика и настройки автоматических релизов см. [DISTRIBUTION.md](DISTRIBUTION.md).
 
 Описание продукта — в [README.md](README.md). Устройство приложения — в [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -11,9 +13,9 @@
 | Компонент | Версия | Зачем |
 | --- | --- | --- |
 | Git | не зафиксирована | Клонирование репозитория. Для работы приложения не нужен. |
-| Node.js | не зафиксирована: в `package.json` нет поля `engines` | Сборка интерфейса Vite и запуск Tauri CLI. |
+| Node.js | 22, не ниже 22.12; `.nvmrc` и `package.json` | Сборка интерфейса Vite и запуск Tauri CLI. |
 | npm | не зафиксирована. В репозитории `package-lock.json` с `lockfileVersion` 3 | Единственный используемый менеджер пакетов JavaScript. |
-| Rust и Cargo | конкретная версия не зафиксирована, файла `rust-toolchain.toml` нет. `src-tauri/Cargo.toml` задаёт `edition = "2024"`, поэтому нужен Rust 1.85 или новее | Сборка desktop-приложения Tauri. |
+| Rust и Cargo | stable, минимальный профиль и компоненты rustfmt/clippy заданы в `rust-toolchain.toml`; зависимости закреплены в Cargo.lock | Сборка desktop-приложения Tauri. |
 | Компилятор MSVC (Visual Studio Build Tools, рабочая нагрузка C++) | версия не зафиксирована | На Windows Rust собирает приложение линковщиком MSVC. |
 | WebView2 Runtime | версия не зафиксирована | Окно Tauri на Windows показывает интерфейс через системный WebView2. На обновлённой Windows 10 он обычно уже установлен. |
 | Python | 3.10, 3.11 или 3.12 | Worker читает PDF, распознаёт текст и переводит. Python 3.14 не подходит: у PaddlePaddle нет колеса для 3.14, это записано в `python-worker/requirements.txt`. |
@@ -42,7 +44,7 @@ cd NeuroBookShelf
 Менеджер пакетов — npm.
 
 ```bash
-npm install
+npm ci
 ```
 
 Команда ставит зависимости из `package-lock.json`.
@@ -202,7 +204,7 @@ data/library.db       SQLite
 ```bash
 git clone https://github.com/WalkingFrozenFish/NeuroBookShelf.git
 cd NeuroBookShelf
-npm install
+npm ci
 py -3.10 -m venv .venv
 source .venv/Scripts/activate
 python -m pip install pymupdf==1.28.2

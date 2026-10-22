@@ -1,0 +1,40 @@
+name: Ошибка
+description: Сообщить о воспроизводимой проблеме.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Не прикладывайте личные PDF, базу библиотеки, ключи и токены. Для проблемы с документом по возможности создайте небольшой обезличенный пример.
+  - type: input
+    id: version
+    attributes:
+      label: Версия приложения
+      placeholder: "0.1.0, Windows setup / portable / macOS DMG / из исходников"
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: ОС и архитектура
+      placeholder: "Windows 11 x64 или macOS 15 Apple Silicon"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      description: Что нужно сделать после запуска, чтобы получить ошибку?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемое и фактическое поведение
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Дополнительные сведения
+      description: Обезличенные сообщения ошибок, скриншот, состояние загрузки моделей. Для PDF укажите, текстовый он или скан.

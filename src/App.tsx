@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { getTheme, setTheme } from "./libraryApi";
+import { DictionaryPage } from "./pages/DictionaryPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { ReaderPage } from "./pages/ReaderPage";
 import { TrashPage } from "./pages/TrashPage";
 import { applyTheme } from "./theme";
+import { TranslationQueuePanel } from "./TranslationQueuePanel";
+import { ModelSetup } from "./ModelSetup";
 import "./styles.css";
 
-type PageId = "library" | "reader" | "trash";
+type PageId = "library" | "reader" | "trash" | "dictionary";
 
 const pages: { id: PageId; label: string; icon: "library" | "reader" | "trash" }[] = [
   { id: "library", label: "Библиотека", icon: "library" },
@@ -68,6 +71,8 @@ function App() {
     setPage("reader");
   }
 
+  const section = page === "dictionary" ? "library" : page;
+
   return (
     <div className="app">
       <header className="topbar">
@@ -80,8 +85,8 @@ function App() {
             <button
               key={item.id}
               type="button"
-              className={item.id === page ? "nav-button active" : "nav-button"}
-              aria-current={item.id === page ? "page" : undefined}
+              className={item.id === section ? "nav-button active" : "nav-button"}
+              aria-current={item.id === section ? "page" : undefined}
               onClick={() => changePage(item.id)}
             >
               <Icon name={item.icon} />
@@ -89,14 +94,28 @@ function App() {
             </button>
           ))}
         </nav>
+        <ModelSetup />
       </header>
-      <main className={page === "reader" ? "content reader-open" : "content"}>
-        {page === "library" && <LibraryPage onOpen={openDocument} theme={theme} onTheme={changeTheme} />}
+      <main
+        className={
+          page === "reader" ? "content reader-open" : page === "dictionary" ? "content lexicon-open" : "content"
+        }
+      >
+        {page === "library" && (
+          <LibraryPage
+            onOpen={openDocument}
+            onOpenDictionary={() => setPage("dictionary")}
+            theme={theme}
+            onTheme={changeTheme}
+          />
+        )}
         {page === "reader" && (
           <ReaderPage documentId={documentId} registerLeaveGuard={registerLeaveGuard} />
         )}
         {page === "trash" && <TrashPage />}
+        {page === "dictionary" && <DictionaryPage onBack={() => setPage("library")} />}
       </main>
+      <TranslationQueuePanel />
     </div>
   );
 }

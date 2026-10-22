@@ -9,19 +9,14 @@ import {
   deleteBookmark,
   deleteNote,
   DictionaryScope,
-  activateTranslationVersion,
   deleteTranslationBlock,
   errorText,
   listBookmarks,
   listNotes,
   listTranslationBlocks,
-  listTranslationVersions,
   NoteRecord,
-  retranslateTranslationBlock,
   TranslationBlockRecord,
-  TranslationVersionRecord,
   updateNote,
-  updateTranslationBlock,
 } from "../libraryApi";
 import { ReaderDictionary } from "./ReaderDictionary";
 
@@ -46,6 +41,7 @@ export function ReaderSidePanel({
   onShowOverlay,
   onShowPopup,
   onBlocksChanged,
+  dictionaryRequest,
 }: {
   width: number;
   onResizeStart: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -59,6 +55,7 @@ export function ReaderSidePanel({
   onShowOverlay: () => void;
   onShowPopup: (id: number) => void;
   onBlocksChanged: () => void;
+  dictionaryRequest: number;
 }) {
   const [tab, setTab] = useState<TabId>("notes");
   const [bookmarks, setBookmarks] = useState<BookmarkRecord[]>([]);
@@ -72,14 +69,23 @@ export function ReaderSidePanel({
   const [blocks, setBlocks] = useState<TranslationBlockRecord[]>([]);
   const [blockError, setBlockError] = useState("");
   const [blockPending, setBlockPending] = useState(false);
-  const [blockEdit, setBlockEdit] = useState<{ id: number; ocrText: string; translatedText: string } | null>(null);
   const [expanded, setExpanded] = useState<number[]>([]);
-  const [historyId, setHistoryId] = useState<number | null>(null);
-  const [versions, setVersions] = useState<TranslationVersionRecord[]>([]);
-  const [retranslateId, setRetranslateId] = useState<number | null>(null);
-  const [retranslateFailed, setRetranslateFailed] = useState(false);
+  const [translationMenu, setTranslationMenu] = useState<number | null>(null);
+  const [openNoteGroups, setOpenNoteGroups] = useState<Array<number | "document">>(["document"]);
+  const [pageNotesOpen, setPageNotesOpen] = useState(true);
+  const [openBookmarkPages, setOpenBookmarkPages] = useState<number[]>([]);
+  const [bookmarksOpen, setBookmarksOpen] = useState(true);
   const [dictionaryScope, setDictionaryScope] = useState<DictionaryScope>("document");
   const [dictionaryRevision, setDictionaryRevision] = useState(0);
+
+  useEffect(() => {
+    if (dictionaryRequest === 0) {
+      return;
+    }
+    setDictionaryScope("global");
+    setDictionaryRevision((current) => current + 1);
+    setTab("dictionary");
+  }, [dictionaryRequest]);
 
   const editingNote = editing ? notes.find((note) => note.id === editing.id) : undefined;
   const editingDirty = Boolean(editing && editingNote && editing.body !== editingNote.body);
@@ -95,7 +101,25 @@ export function ReaderSidePanel({
   }, [pageDirty, anyDirty, onDirtyChange]);
 
   useEffect(() => {
+    if (translationMenu === null) {
+      return;
+    }
+    function close(event: PointerEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-translation-menu], [data-translation-menu-button]")) {
+        return;
+      }
+      setTranslationMenu(null);
+    }
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [translationMenu]);
+
+  useEffect(() => {
     setPageDraft("");
+    setTranslationMenu(null);
+    setOpenNoteGroups((current) => (current.includes(pageNumber) ? current : [...current, pageNumber]));
+    setOpenBookmarkPages((current) => (current.includes(pageNumber) ? current : [...current, pageNumber]));
     setEditing((current) => {
       if (!current || current.pageNumber === null || current.pageNumber === pageNumber) {
         return current;
@@ -131,7 +155,6 @@ export function ReaderSidePanel({
   useEffect(() => {
     let active = true;
     setBlockError("");
-    setBlockEdit(null);
     listTranslationBlocks(documentId, pageNumber)
       .then((list) => {
         if (active) {
@@ -172,6 +195,8 @@ export function ReaderSidePanel({
     void run(async () => {
       await createBookmark(documentId, pageNumber, label);
       setLabel("");
+      setBookmarksOpen(true);
+      setOpenBookmarkPages((current) => (current.includes(pageNumber) ? current : [...current, pageNumber]));
     });
   }
 
@@ -182,8 +207,11 @@ export function ReaderSidePanel({
       await createNote(documentId, scope === "document" ? null : pageNumber, draft);
       if (scope === "document") {
         setDocumentDraft("");
+        setOpenNoteGroups((current) => (current.includes("document") ? current : [...current, "document"]));
       } else {
         setPageDraft("");
+        setPageNotesOpen(true);
+        setOpenNoteGroups((current) => (current.includes(pageNumber) ? current : [...current, pageNumber]));
       }
     });
   }
@@ -204,7 +232,6 @@ export function ReaderSidePanel({
   function addBlockToDictionary(scope: DictionaryScope, block: TranslationBlockRecord) {
     setBlockPending(true);
     setBlockError("");
-    setRetranslateFailed(false);
     void createDictionaryEntry(
       scope,
       scope === "document" ? documentId : null,
@@ -222,7 +249,42 @@ export function ReaderSidePanel({
   }
 
   const documentNotes = notes.filter((note) => note.pageNumber === null);
-  const pageNotes = notes.filter((note) => note.pageNumber === pageNumber);
+  const groupedPageNotes = pageNoteGroups(notes);
+  const pageNoteCount = groupedPageNotes.reduce((sum, [, items]) => sum + items.length, 0);
+  const groupedBookmarks = pageBookmarkGroups(bookmarks);
+
+  function toggleNoteGroup(key: number | "document") {
+    setOpenNoteGroups((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
+  }
+
+  function toggleBookmarkPage(page: number) {
+    setOpenBookmarkPages((current) =>
+      current.includes(page) ? current.filter((item) => item !== page) : [...current, page],
+    );
+  }
+
+  function noteList(items: NoteRecord[]) {
+    return (
+      <NoteList
+        notes={items}
+        pending={pending}
+        editing={editing}
+        onEdit={setEditing}
+        onEditBody={(body) => setEditing((current) => (current ? { ...current, body } : current))}
+        onSave={saveEdit}
+        onCancel={() => setEditing(null)}
+        onDelete={(id) => {
+          void (async () => {
+            if (await confirmAction("Удалить заметку?")) {
+              void run(() => deleteNote(id));
+            }
+          })();
+        }}
+      />
+    );
+  }
 
   return (
     <aside className="reader-side" aria-label="Дополнительная панель">
@@ -283,78 +345,114 @@ export function ReaderSidePanel({
       </div>
       <div className="side-body" hidden={tab !== "notes"}>
         {error && tab === "notes" ? <p className="error">{error}</p> : null}
-        <section>
-          <h2>Заметки документа</h2>
-          <p className="meta">Общие, видны на любой странице.</p>
-          <NoteList
-            notes={documentNotes}
-            scopeLabel="Общая"
-            pending={pending}
-            editing={editing}
-            onEdit={setEditing}
-            onEditBody={(body) => setEditing((current) => (current ? { ...current, body } : current))}
-            onSave={saveEdit}
-            onCancel={() => setEditing(null)}
-            onDelete={(id) => {
-              void (async () => {
-                if (await confirmAction("Удалить заметку?")) {
-                  void run(() => deleteNote(id));
-                }
-              })();
-            }}
+        <form className="side-form note-form" onSubmit={(event) => addNote(event, "page")}>
+          <textarea
+            data-page-note
+            value={pageDraft}
+            placeholder={`Заметка к странице ${pageNumber}`}
+            disabled={pending}
+            onChange={(event) => setPageDraft(event.target.value)}
           />
-          <form className="side-form" onSubmit={(event) => addNote(event, "document")}>
-            <textarea
-              value={documentDraft}
-              placeholder="Новая общая заметка"
-              disabled={pending}
-              onChange={(event) => setDocumentDraft(event.target.value)}
-            />
-            <button type="submit" disabled={pending || documentDraft.trim() === ""}>
-              Сохранить
-            </button>
-          </form>
-        </section>
-        <section>
-          <h2>Заметки страницы {pageNumber}</h2>
-          <p className="meta">Только для этой страницы.</p>
-          <NoteList
-            notes={pageNotes}
-            scopeLabel={`Страница ${pageNumber}`}
-            pending={pending}
-            editing={editing}
-            onEdit={setEditing}
-            onEditBody={(body) => setEditing((current) => (current ? { ...current, body } : current))}
-            onSave={saveEdit}
-            onCancel={() => setEditing(null)}
-            onDelete={(id) => {
-              void (async () => {
-                if (await confirmAction("Удалить заметку?")) {
-                  void run(() => deleteNote(id));
-                }
-              })();
-            }}
-          />
-          <form className="side-form" onSubmit={(event) => addNote(event, "page")}>
-            <textarea
-              data-page-note
-              value={pageDraft}
-              placeholder={`Заметка к странице ${pageNumber}`}
-              disabled={pending}
-              onChange={(event) => setPageDraft(event.target.value)}
-            />
-            <button type="submit" disabled={pending || pageDraft.trim() === ""}>
-              Сохранить
-            </button>
-          </form>
-        </section>
+          <button type="submit" disabled={pending || pageDraft.trim() === ""}>
+            Добавить заметку
+          </button>
+        </form>
+        <div className="note-groups">
+          <section
+            className="note-group"
+            data-note-page="document"
+            data-note-open={openNoteGroups.includes("document") ? "1" : "0"}
+          >
+            <div className="note-group-head">
+              <button
+                type="button"
+                className="note-group-toggle"
+                aria-expanded={openNoteGroups.includes("document")}
+                data-count={documentNotes.length}
+                onClick={() => toggleNoteGroup("document")}
+              >
+                Общие заметки
+              </button>
+            </div>
+            {openNoteGroups.includes("document") ? (
+              <div className="note-group-body">
+                {noteList(documentNotes)}
+                <form className="side-form note-form" onSubmit={(event) => addNote(event, "document")}>
+                  <textarea
+                    value={documentDraft}
+                    placeholder="Новая общая заметка"
+                    disabled={pending}
+                    onChange={(event) => setDocumentDraft(event.target.value)}
+                  />
+                  <button type="submit" disabled={pending || documentDraft.trim() === ""}>
+                    Добавить общую
+                  </button>
+                </form>
+              </div>
+            ) : null}
+          </section>
+          <section
+            className="note-group"
+            data-note-page="pages"
+            data-note-open={pageNotesOpen ? "1" : "0"}
+          >
+            <div className="note-group-head">
+              <button
+                type="button"
+                className="note-group-toggle"
+                aria-expanded={pageNotesOpen}
+                data-count={pageNoteCount}
+                onClick={() => setPageNotesOpen((current) => !current)}
+              >
+                По страницам
+              </button>
+            </div>
+            {pageNotesOpen ? (
+              <div className="note-group-body">
+                {groupedPageNotes.length === 0 ? (
+                  <p className="meta">Заметок на страницах пока нет.</p>
+                ) : (
+                  groupedPageNotes.map(([groupPage, groupNotes]) => {
+                    const open = openNoteGroups.includes(groupPage);
+                    return (
+                      <section
+                        key={groupPage}
+                        className={groupPage === pageNumber ? "note-group current" : "note-group"}
+                        data-note-page={groupPage}
+                        data-note-open={open ? "1" : "0"}
+                      >
+                        <div className="note-group-head">
+                          <button
+                            type="button"
+                            className="note-group-toggle"
+                            aria-expanded={open}
+                            data-count={groupNotes.length}
+                            onClick={() => toggleNoteGroup(groupPage)}
+                          >
+                            {`Страница ${groupPage}`}
+                          </button>
+                          {groupPage === pageNumber ? null : (
+                            <button type="button" onClick={() => onOpenPage(groupPage)}>
+                              К странице
+                            </button>
+                          )}
+                        </div>
+                        {open ? <div className="note-group-body">{noteList(groupNotes)}</div> : null}
+                      </section>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </section>
+        </div>
       </div>
       <div className="side-body" hidden={tab !== "bookmarks"}>
         {error && tab === "bookmarks" ? <p className="error">{error}</p> : null}
-        <form className="side-form" onSubmit={addBookmark}>
-          <input
+        <form className="side-form bookmark-form" onSubmit={addBookmark}>
+          <textarea
             value={label}
-            placeholder="Название, необязательно"
+            placeholder="Заметка к закладке, необязательно"
             disabled={pending}
             onChange={(event) => setLabel(event.target.value)}
           />
@@ -362,241 +460,157 @@ export function ReaderSidePanel({
             Добавить закладку
           </button>
         </form>
-        {bookmarks.length === 0 ? (
-          <p className="meta">Закладок пока нет.</p>
-        ) : (
-          <ul className="side-list">
-            {bookmarks.map((bookmark) => (
-              <li
-                key={bookmark.id}
-                data-bookmark-id={bookmark.id}
-                data-bookmark-page={bookmark.pageNumber}
-                className={bookmark.pageNumber === pageNumber ? "current" : undefined}
+        <div className="note-groups">
+          <section className="note-group" data-bookmark-group="pages" data-bookmark-open={bookmarksOpen ? "1" : "0"}>
+            <div className="note-group-head">
+              <button
+                type="button"
+                className="note-group-toggle"
+                aria-expanded={bookmarksOpen}
+                data-count={bookmarks.length}
+                onClick={() => setBookmarksOpen((current) => !current)}
               >
-                <button type="button" onClick={() => onOpenPage(bookmark.pageNumber)}>
-                  <strong>{bookmark.label || `Страница ${bookmark.pageNumber}`}</strong>
-                  <span className="meta">стр. {bookmark.pageNumber}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    void (async () => {
-                      if (await confirmAction("Удалить закладку?")) {
-                        void run(() => deleteBookmark(bookmark.id));
-                      }
-                    })();
-                  }}
-                >
-                  Удалить
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+                По страницам
+              </button>
+            </div>
+            {bookmarksOpen ? (
+              <div className="note-group-body">
+                {groupedBookmarks.length === 0 ? (
+                  <p className="meta">Закладок пока нет.</p>
+                ) : (
+                  groupedBookmarks.map(([groupPage, groupBookmarks]) => {
+                    const open = openBookmarkPages.includes(groupPage);
+                    return (
+                      <section
+                        key={groupPage}
+                        className={groupPage === pageNumber ? "note-group current" : "note-group"}
+                        data-bookmark-group={groupPage}
+                        data-bookmark-open={open ? "1" : "0"}
+                      >
+                        <div className="note-group-head">
+                          <button
+                            type="button"
+                            className="note-group-toggle"
+                            aria-expanded={open}
+                            data-count={groupBookmarks.length}
+                            onClick={() => toggleBookmarkPage(groupPage)}
+                          >
+                            {`Страница ${groupPage}`}
+                          </button>
+                          {groupPage === pageNumber ? null : (
+                            <button type="button" onClick={() => onOpenPage(groupPage)}>
+                              К странице
+                            </button>
+                          )}
+                        </div>
+                        {open ? (
+                          <div className="note-group-body">
+                            <ul className="side-list">
+                              {groupBookmarks.map((bookmark) => (
+                                <li
+                                  key={bookmark.id}
+                                  data-bookmark-id={bookmark.id}
+                                  data-bookmark-page={bookmark.pageNumber}
+                                  className={bookmark.pageNumber === pageNumber ? "bookmark-card current" : "bookmark-card"}
+                                >
+                                  <button
+                                    type="button"
+                                    className="bookmark-open"
+                                    onClick={() => onOpenPage(bookmark.pageNumber)}
+                                  >
+                                    <span className="bookmark-text">
+                                      {bookmark.label || `Страница ${bookmark.pageNumber}`}
+                                    </span>
+                                  </button>
+                                  <div className="bookmark-actions">
+                                    <button
+                                      type="button"
+                                      className="icon-button"
+                                      aria-label="Удалить"
+                                      disabled={pending}
+                                      onClick={() => {
+                                        void (async () => {
+                                          if (await confirmAction("Удалить закладку?")) {
+                                            void run(() => deleteBookmark(bookmark.id));
+                                          }
+                                        })();
+                                      }}
+                                    >
+                                      <Icon name="trash" />
+                                      <span className="sr-only">Удалить</span>
+                                    </button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </section>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </section>
+        </div>
       </div>
       <div className="side-body" hidden={tab !== "translations"}>
-        {blockError ? (
-          <p className="error" data-retranslate-state={retranslateFailed ? "error" : undefined}>
-            {blockError}
-          </p>
-        ) : null}
+        {blockError ? <p className="error">{blockError}</p> : null}
         {blocks.length === 0 ? (
           <p className="meta">На этой странице переводов нет.</p>
         ) : (
           <ul className="side-list">
             {blocks.map((block) => {
-              const active = blockEdit?.id === block.id;
               const open = expanded.includes(block.id);
               return (
                 <li
                   key={block.id}
                   data-translation-id={block.id}
-                  className={highlightedId === block.id ? "highlighted" : undefined}
+                  className={highlightedId === block.id ? "translation-card highlighted" : "translation-card"}
                 >
-                  {active && blockEdit ? (
-                    <form
-                      className="side-form"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        const draft = blockEdit;
-                        setBlockPending(true);
-                        setBlockError("");
-                        void updateTranslationBlock(draft.id, draft.ocrText, draft.translatedText)
-                          .then(() => listTranslationBlocks(documentId, pageNumber))
-                          .then((list) => {
-                            setBlocks(list);
-                            setBlockEdit(null);
-                            onBlocksChanged();
-                            if (historyId === draft.id) {
-                              return listTranslationVersions(draft.id).then(setVersions);
-                            }
-                            return undefined;
-                          })
-                          .catch((saveError: unknown) => setBlockError(errorText(saveError)))
-                          .finally(() => setBlockPending(false));
-                      }}
-                    >
-                      <textarea
-                        aria-label="Исходный текст"
-                        data-edit-ocr
-                        value={blockEdit.ocrText}
-                        disabled={blockPending}
-                        onChange={(event) =>
-                          setBlockEdit((current) =>
-                            current ? { ...current, ocrText: event.target.value } : current,
-                          )
-                        }
-                      />
-                      <textarea
-                        aria-label="Перевод блока"
-                        data-edit-translation
-                        value={blockEdit.translatedText}
-                        disabled={blockPending}
-                        onChange={(event) =>
-                          setBlockEdit((current) =>
-                            current ? { ...current, translatedText: event.target.value } : current,
-                          )
-                        }
-                      />
-                      <div className="actions">
-                        <button
-                          type="submit"
-                          disabled={
-                            blockPending ||
-                            blockEdit.ocrText.trim() === "" ||
-                            blockEdit.translatedText.trim() === ""
-                          }
-                        >
-                          Сохранить
-                        </button>
-                        <button type="button" disabled={blockPending} onClick={() => setBlockEdit(null)}>
-                          Отмена
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <>
+                  <button
+                    type="button"
+                    className="translation-menu-button"
+                    data-translation-menu-button
+                    aria-label="Действия перевода"
+                    aria-expanded={translationMenu === block.id}
+                    disabled={blockPending}
+                    onClick={() => setTranslationMenu((current) => (current === block.id ? null : block.id))}
+                  >
+                    ⋮
+                  </button>
+                  {translationMenu === block.id ? (
+                    <div className="translation-menu" data-translation-menu role="menu">
                       <button
                         type="button"
-                        className="block-open"
+                        role="menuitem"
+                        disabled={blockPending}
                         onClick={() => {
-                          onShowOverlay();
-                          onHighlight(block);
+                          setTranslationMenu(null);
+                          addBlockToDictionary("document", block);
                         }}
                       >
-                        <strong>{`#${block.id}`}</strong>
-                        <span className={open ? "block-text" : "block-text clamp"}>{block.ocrText}</span>
-                        <span className={open ? "block-text" : "block-text clamp"}>{block.translatedText}</span>
+                        В словарь книги
                       </button>
-                      <div className="actions">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onHighlight(block);
-                            onShowPopup(block.id);
-                          }}
-                        >
-                          <Icon name="overlay" />
-                          Показать
-                        </button>
-                        {block.ocrText.length > 140 || block.translatedText.length > 140 ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setExpanded((current) =>
-                                current.includes(block.id)
-                                  ? current.filter((id) => id !== block.id)
-                                  : [...current, block.id],
-                              )
-                            }
-                          >
-                            {open ? "Свернуть" : "Ещё"}
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          disabled={blockPending || retranslateId !== null}
-                          data-retranslate={block.id}
-                          onClick={() => {
-                            setRetranslateId(block.id);
-                            setRetranslateFailed(false);
-                            setBlockError("");
-                            void retranslateTranslationBlock(block.id)
-                              .then(() => listTranslationBlocks(documentId, pageNumber))
-                              .then((list) => {
-                                setBlocks(list);
-                                onBlocksChanged();
-                                if (historyId === block.id) {
-                                  return listTranslationVersions(block.id).then(setVersions);
-                                }
-                                return undefined;
-                              })
-                              .catch((retranslateError: unknown) => {
-                                setRetranslateFailed(true);
-                                setBlockError(errorText(retranslateError));
-                              })
-                              .finally(() => setRetranslateId(null));
-                          }}
-                        >
-                          Перевести заново
-                        </button>
-                        {retranslateId === block.id ? (
-                          <span data-retranslate-state="loading">Перевод…</span>
-                        ) : null}
-                        <button
-                          type="button"
-                          disabled={blockPending}
-                          onClick={() => {
-                            if (historyId === block.id) {
-                              setHistoryId(null);
-                              setVersions([]);
-                              return;
-                            }
-                            setBlockError("");
-                            setRetranslateFailed(false);
-                            void listTranslationVersions(block.id)
-                              .then((list) => {
-                                setHistoryId(block.id);
-                                setVersions(list);
-                              })
-                              .catch((historyError: unknown) => setBlockError(errorText(historyError)));
-                          }}
-                        >
-                          Версии
-                        </button>
-                        <button
-                          type="button"
-                          disabled={blockPending}
-                          onClick={() =>
-                            setBlockEdit({
-                              id: block.id,
-                              ocrText: block.ocrText,
-                              translatedText: block.translatedText,
-                            })
-                          }
-                        >
-                          Изменить
-                        </button>
-                        <button
-                          type="button"
-                          disabled={blockPending}
-                          onClick={() => addBlockToDictionary("document", block)}
-                        >
-                          В словарь книги
-                        </button>
-                        <button
-                          type="button"
-                          disabled={blockPending}
-                          onClick={() => addBlockToDictionary("global", block)}
-                        >
-                          В общий словарь
-                        </button>
-                        <button
-                          type="button"
-                          disabled={blockPending}
-                          onClick={() => {
-                            void (async () => {
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={blockPending}
+                        onClick={() => {
+                          setTranslationMenu(null);
+                          addBlockToDictionary("global", block);
+                        }}
+                      >
+                        В общий словарь
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="danger"
+                        disabled={blockPending}
+                        onClick={() => {
+                          setTranslationMenu(null);
+                          void (async () => {
                             if (await confirmAction("Удалить перевод?")) {
                               setBlockPending(true);
                               setBlockError("");
@@ -604,66 +618,58 @@ export function ReaderSidePanel({
                                 .then(() => listTranslationBlocks(documentId, pageNumber))
                                 .then((list) => {
                                   setBlocks(list);
-                                  if (blockEdit?.id === block.id) {
-                                    setBlockEdit(null);
-                                  }
-                                  if (historyId === block.id) {
-                                    setHistoryId(null);
-                                    setVersions([]);
-                                  }
                                   onBlocksChanged();
                                 })
                                 .catch((deleteError: unknown) => setBlockError(errorText(deleteError)))
                                 .finally(() => setBlockPending(false));
                             }
-                            })();
-                          }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                      {historyId === block.id ? (
-                        <ul className="version-list" data-version-list={block.id}>
-                          {versions.map((version) => (
-                            <li
-                              key={version.id}
-                              data-version-id={version.id}
-                              data-version-active={version.isActive ? "true" : "false"}
-                              data-translator={version.translator}
-                            >
-                              <span className="meta">{version.createdAt}</span>
-                              <span>{engineLabel(version.translator)}</span>
-                              <span>{preview(version.translatedText)}</span>
-                              {version.isActive ? <strong>Активная</strong> : null}
-                              {version.isActive ? null : (
-                                <button
-                                  type="button"
-                                  disabled={blockPending}
-                                  onClick={() => {
-                                    setBlockPending(true);
-                                    setBlockError("");
-                                    setRetranslateFailed(false);
-                                    void activateTranslationVersion(version.id)
-                                      .then(() => listTranslationBlocks(documentId, pageNumber))
-                                      .then((list) => {
-                                        setBlocks(list);
-                                        onBlocksChanged();
-                                        return listTranslationVersions(block.id);
-                                      })
-                                      .then(setVersions)
-                                      .catch((activateError: unknown) => setBlockError(errorText(activateError)))
-                                      .finally(() => setBlockPending(false));
-                                  }}
-                                >
-                                  Сделать активной
-                                </button>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </>
-                  )}
+                          })();
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="block-open"
+                    onClick={() => {
+                      onShowOverlay();
+                      onHighlight(block);
+                    }}
+                  >
+                    <span className="lang-label">EN</span>
+                    <span className={open ? "block-text" : "block-text clamp"}>{block.ocrText}</span>
+                    <span className="translation-split" aria-hidden="true" />
+                    <span className="lang-label">RU</span>
+                    <span className={open ? "block-text" : "block-text clamp"}>{block.translatedText}</span>
+                  </button>
+                  <div className="actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onHighlight(block);
+                        onShowPopup(block.id);
+                      }}
+                    >
+                      <Icon name="overlay" />
+                      Показать
+                    </button>
+                    {block.ocrText.length > 140 || block.translatedText.length > 140 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpanded((current) =>
+                            current.includes(block.id)
+                              ? current.filter((id) => id !== block.id)
+                              : [...current, block.id],
+                          )
+                        }
+                      >
+                        {open ? "Свернуть" : "Развернуть"}
+                      </button>
+                    ) : null}
+                  </div>
                 </li>
               );
             })}
@@ -682,27 +688,8 @@ export function ReaderSidePanel({
   );
 }
 
-function engineLabel(translator: string): string {
-  if (translator === "manual") {
-    return "ручная правка";
-  }
-  if (translator === "legacy") {
-    return "сохранённый перевод";
-  }
-  if (translator === "ctranslate2:en-ru") {
-    return "локальный en→ru";
-  }
-  return translator;
-}
-
-function preview(text: string): string {
-  const compact = text.replace(/\s+/g, " ").trim();
-  return compact.length > 80 ? `${compact.slice(0, 80)}…` : compact;
-}
-
 function NoteList({
   notes,
-  scopeLabel,
   pending,
   editing,
   onEdit,
@@ -712,7 +699,6 @@ function NoteList({
   onDelete,
 }: {
   notes: NoteRecord[];
-  scopeLabel: string;
   pending: boolean;
   editing: Editing | null;
   onEdit: (editing: Editing) => void;
@@ -729,10 +715,14 @@ function NoteList({
       {notes.map((note) => {
         const active = editing?.id === note.id;
         return (
-          <li key={note.id} data-note-id={note.id} data-note-scope={note.pageNumber === null ? "document" : "page"}>
-            <span className="meta">{scopeLabel}</span>
+          <li
+            key={note.id}
+            className="note-card"
+            data-note-id={note.id}
+            data-note-scope={note.pageNumber === null ? "document" : "page"}
+          >
             {active ? (
-              <form className="side-form" onSubmit={onSave}>
+              <form className="side-form note-form" onSubmit={onSave}>
                 <textarea
                   value={editing.body}
                   disabled={pending}
@@ -749,19 +739,29 @@ function NoteList({
               </form>
             ) : (
               <>
-                <p>{note.body}</p>
-                <div className="actions">
+                <p className="note-text">{note.body}</p>
+                <div className="note-actions">
                   <button
                     type="button"
+                    className="icon-button"
+                    aria-label="Изменить"
                     disabled={pending}
                     onClick={() =>
                       onEdit({ id: note.id, pageNumber: note.pageNumber, body: note.body })
                     }
                   >
-                    Изменить
+                    <Icon name="edit" />
+                    <span className="sr-only">Изменить</span>
                   </button>
-                  <button type="button" disabled={pending} onClick={() => onDelete(note.id)}>
-                    Удалить
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Удалить"
+                    disabled={pending}
+                    onClick={() => onDelete(note.id)}
+                  >
+                    <Icon name="trash" />
+                    <span className="sr-only">Удалить</span>
                   </button>
                 </div>
               </>
@@ -771,4 +771,27 @@ function NoteList({
       })}
     </ul>
   );
+}
+
+function pageBookmarkGroups(bookmarks: BookmarkRecord[]): Array<[number, BookmarkRecord[]]> {
+  const groups = new Map<number, BookmarkRecord[]>();
+  for (const bookmark of bookmarks) {
+    const list = groups.get(bookmark.pageNumber) ?? [];
+    list.push(bookmark);
+    groups.set(bookmark.pageNumber, list);
+  }
+  return [...groups.entries()].sort((left, right) => left[0] - right[0]);
+}
+
+function pageNoteGroups(notes: NoteRecord[]): Array<[number, NoteRecord[]]> {
+  const groups = new Map<number, NoteRecord[]>();
+  for (const note of notes) {
+    if (note.pageNumber === null) {
+      continue;
+    }
+    const list = groups.get(note.pageNumber) ?? [];
+    list.push(note);
+    groups.set(note.pageNumber, list);
+  }
+  return [...groups.entries()].sort((left, right) => left[0] - right[0]);
 }

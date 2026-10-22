@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, RefObject, useEffect, useRef, useState } from "react";
 import { confirmAction } from "../confirm";
+import { Icon } from "../icons";
 import {
   createDictionaryEntry,
   deleteDictionaryEntry,
@@ -19,6 +20,50 @@ type Draft = {
 
 const emptyDraft: Draft = { id: null, sourceText: "", translatedText: "", note: "" };
 
+type Sense = {
+  ids: number[];
+  translation: string;
+  note: string;
+};
+
+type WordGroup = {
+  key: string;
+  word: string;
+  senses: Sense[];
+};
+
+function dictionaryForm(text: string): string {
+  return text.trim().toLocaleLowerCase();
+}
+
+function groupWords(entries: DictionaryEntryRecord[]): WordGroup[] {
+  const groups = new Map<string, WordGroup>();
+  for (const entry of entries) {
+    const word = dictionaryForm(entry.sourceText);
+    const translation = dictionaryForm(entry.translatedText);
+    if (!word || !translation) {
+      continue;
+    }
+    let group = groups.get(word);
+    if (!group) {
+      group = { key: word, word, senses: [] };
+      groups.set(word, group);
+    }
+    const sense = group.senses.find((item) => item.translation === translation);
+    if (sense) {
+      sense.ids.push(entry.id);
+      if (!sense.note && entry.note.trim()) {
+        sense.note = entry.note.trim();
+      }
+    } else {
+      group.senses.push({ ids: [entry.id], translation, note: entry.note.trim() });
+    }
+  }
+  return [...groups.values()].sort((left, right) =>
+    left.word.localeCompare(right.word, "en", { sensitivity: "base" }),
+  );
+}
+
 export function ReaderDictionary({
   documentId,
   scope,
@@ -33,12 +78,14 @@ export function ReaderDictionary({
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<DictionaryEntryRecord[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const sourceRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
-    listDictionaryEntries(scope, scope === "document" ? documentId : null, query)
+    listDictionaryEntries(scope, scope === "document" ? documentId : null, "")
       .then((list) => {
         if (active) {
           setEntries(list);
@@ -53,7 +100,24 @@ export function ReaderDictionary({
     return () => {
       active = false;
     };
-  }, [documentId, scope, query, revision]);
+  }, [documentId, scope, revision]);
+
+  useEffect(() => {
+    setAdding(false);
+    setDraft(emptyDraft);
+  }, [scope]);
+
+  useEffect(() => {
+    if (adding || draft.id !== null) {
+      sourceRef.current?.focus();
+    }
+  }, [adding, draft.id]);
+
+  useEffect(() => {
+    if (draft.id !== null && !entries.some((entry) => entry.id === draft.id)) {
+      setDraft(emptyDraft);
+    }
+  }, [entries, draft.id]);
 
   function save(event: FormEvent) {
     event.preventDefault();
@@ -70,28 +134,50 @@ export function ReaderDictionary({
           )
         : updateDictionaryEntry(draft.id, draft.sourceText, draft.translatedText, draft.note);
     void request
-      .then(() => listDictionaryEntries(scope, scope === "document" ? documentId : null, query))
+      .then(() => listDictionaryEntries(scope, scope === "document" ? documentId : null, ""))
       .then((list) => {
         setEntries(list);
         setDraft(emptyDraft);
+        setAdding(false);
       })
       .catch((saveError: unknown) => setError(errorText(saveError)))
       .finally(() => setPending(false));
   }
 
+  function closeForm() {
+    setDraft(emptyDraft);
+    setAdding(false);
+  }
+
+  const trimmedQuery = query.trim().toLocaleLowerCase();
+  const groups = groupWords(entries).filter((group) => {
+    if (!trimmedQuery) {
+      return true;
+    }
+    return (
+      group.word.includes(trimmedQuery) ||
+      group.senses.some(
+        (sense) => sense.translation.includes(trimmedQuery) || sense.note.toLocaleLowerCase().includes(trimmedQuery),
+      )
+    );
+  });
+  const formOpen = adding || draft.id !== null;
+
   return (
-    <div data-dictionary-scope={scope}>
-      <div className="actions" role="tablist" aria-label="Словарь">
+    <div className="dictionary" data-dictionary-scope={scope}>
+      <div className="dictionary-scope" role="tablist" aria-label="Словарь">
         <button
           type="button"
+          role="tab"
           className={scope === "document" ? "active" : undefined}
           aria-selected={scope === "document"}
           onClick={() => onScope("document")}
         >
-          Книга
+          Эта книга
         </button>
         <button
           type="button"
+          role="tab"
           className={scope === "global" ? "active" : undefined}
           aria-selected={scope === "global"}
           onClick={() => onScope("global")}
@@ -99,110 +185,251 @@ export function ReaderDictionary({
           Общий
         </button>
       </div>
-      <p className="meta">
-        {scope === "document"
-          ? "Записи только этой книги."
-          : "Общие записи, видны в любой книге."}
+      <p className="dictionary-hint">
+        {scope === "document" ? "Только для этой книги." : "Виден в любой книге."}
       </p>
-      <input
-        value={query}
-        aria-label="Поиск по словарю"
-        data-dictionary-search=""
-        placeholder="Поиск"
-        onChange={(event) => setQuery(event.target.value)}
-      />
-      {error ? <p className="error">{error}</p> : null}
-      <form className="side-form" onSubmit={save}>
+      <div className="dictionary-search">
         <input
-          aria-label="Слово или фраза"
-          data-dictionary-source=""
-          value={draft.sourceText}
-          disabled={pending}
-          onChange={(event) => setDraft((current) => ({ ...current, sourceText: event.target.value }))}
+          type="search"
+          value={query}
+          aria-label="Поиск по словарю"
+          data-dictionary-search=""
+          placeholder="Найти слово или перевод"
+          onChange={(event) => setQuery(event.target.value)}
         />
-        <input
-          aria-label="Перевод слова"
-          data-dictionary-translation=""
-          value={draft.translatedText}
-          disabled={pending}
-          onChange={(event) =>
-            setDraft((current) => ({ ...current, translatedText: event.target.value }))
-          }
-        />
-        <input
-          aria-label="Комментарий"
-          data-dictionary-note=""
-          value={draft.note}
-          disabled={pending}
-          onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
-        />
-        <div className="actions">
+        {query ? (
           <button
-            type="submit"
-            disabled={pending || draft.sourceText.trim() === "" || draft.translatedText.trim() === ""}
+            type="button"
+            className="icon-button"
+            aria-label="Очистить поиск"
+            onClick={() => setQuery("")}
           >
-            {draft.id === null ? "Добавить" : "Сохранить"}
+            <Icon name="clear" />
           </button>
-          {draft.id !== null ? (
-            <button type="button" disabled={pending} onClick={() => setDraft(emptyDraft)}>
-              Отмена
-            </button>
-          ) : null}
-        </div>
-      </form>
-      {entries.length === 0 ? (
-        <p className="meta">Записей нет.</p>
+        ) : null}
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      {draft.id !== null ? null : adding ? (
+        <EntryForm
+          draft={draft}
+          pending={pending}
+          submitLabel="Добавить"
+          sourceRef={sourceRef}
+          onChange={setDraft}
+          onSubmit={save}
+          onCancel={closeForm}
+        />
       ) : (
-        <ul className="side-list">
-          {entries.map((entry) => (
-            <li key={entry.id} data-dictionary-id={entry.id}>
-              <strong>{entry.sourceText}</strong>
-              <span>{entry.translatedText}</span>
-              {entry.note ? <span className="meta">{entry.note}</span> : null}
-              <div className="actions">
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() =>
-                    setDraft({
-                      id: entry.id,
-                      sourceText: entry.sourceText,
-                      translatedText: entry.translatedText,
-                      note: entry.note,
-                    })
-                  }
+        <button
+          type="button"
+          className="dictionary-add"
+          disabled={pending}
+          onClick={() => {
+            setDraft(emptyDraft);
+            setAdding(true);
+          }}
+        >
+          <Icon name="plus" />
+          Добавить слово
+        </button>
+      )}
+      {entries.length === 0 ? (
+        <p className="dictionary-empty">
+          {scope === "document"
+            ? "В словаре этой книги пока пусто. Добавьте слово или сохраните фразу из перевода."
+            : "Общий словарь пока пуст. Записи отсюда будут видны в любой книге."}
+        </p>
+      ) : groups.length === 0 ? (
+        <p className="dictionary-empty">Ничего не нашлось. Попробуйте другое слово.</p>
+      ) : (
+        <>
+          <p className="dictionary-summary">
+            {trimmedQuery ? `Найдено: ${groups.length}` : wordCountLabel(groups.length)}
+          </p>
+          <ul className="side-list">
+            {groups.map((group) => {
+              const editing = group.senses.some((sense) => sense.ids.includes(draft.id ?? -1));
+              return (
+                <li
+                  key={group.key}
+                  className={editing ? "dictionary-card editing" : "dictionary-card"}
+                  data-dictionary-word={group.key}
                 >
-                  Изменить
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    void (async () => {
-                    if (await confirmAction("Удалить запись словаря?")) {
-                      setPending(true);
-                      setError("");
-                      void deleteDictionaryEntry(entry.id)
-                        .then(() => listDictionaryEntries(scope, scope === "document" ? documentId : null, query))
-                        .then((list) => {
-                          setEntries(list);
-                          if (draft.id === entry.id) {
-                            setDraft(emptyDraft);
-                          }
-                        })
-                        .catch((deleteError: unknown) => setError(errorText(deleteError)))
-                        .finally(() => setPending(false));
-                    }
-                    })();
-                  }}
-                >
-                  Удалить
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+                  <span className="dictionary-word">{group.word}</span>
+                  <ul className="dictionary-senses">
+                    {group.senses.map((sense) => {
+                      const senseEditing = sense.ids.includes(draft.id ?? -1);
+                      if (senseEditing) {
+                        return (
+                          <li key={sense.translation} className="editing">
+                            <EntryForm
+                              draft={draft}
+                              pending={pending}
+                              submitLabel="Сохранить"
+                              sourceRef={sourceRef}
+                              onChange={setDraft}
+                              onSubmit={save}
+                              onCancel={closeForm}
+                            />
+                          </li>
+                        );
+                      }
+                      const entry = entries.find((item) => item.id === sense.ids[0]);
+                      return (
+                        <li key={sense.translation} className="dictionary-sense">
+                          <div className="dictionary-sense-text">
+                            <span className="dictionary-meaning">{sense.translation}</span>
+                            {sense.note ? <span className="dictionary-note">{sense.note}</span> : null}
+                          </div>
+                          <div className="dictionary-card-actions">
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label={`Изменить ${sense.translation}`}
+                              disabled={pending || formOpen || !entry}
+                              onClick={() => {
+                                if (!entry) {
+                                  return;
+                                }
+                                setAdding(false);
+                                setDraft({
+                                  id: entry.id,
+                                  sourceText: entry.sourceText,
+                                  translatedText: entry.translatedText,
+                                  note: entry.note,
+                                });
+                              }}
+                            >
+                              <Icon name="edit" />
+                            </button>
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label={`Удалить ${sense.translation}`}
+                              disabled={pending || formOpen}
+                              onClick={() => {
+                                void (async () => {
+                                  if (await confirmAction("Удалить этот перевод?")) {
+                                    setPending(true);
+                                    setError("");
+                                    void Promise.all(sense.ids.map((id) => deleteDictionaryEntry(id)))
+                                      .then(() =>
+                                        listDictionaryEntries(
+                                          scope,
+                                          scope === "document" ? documentId : null,
+                                          "",
+                                        ),
+                                      )
+                                      .then((list) => {
+                                        setEntries(list);
+                                        if (draft.id !== null && sense.ids.includes(draft.id)) {
+                                          closeForm();
+                                        }
+                                      })
+                                      .catch((deleteError: unknown) => setError(errorText(deleteError)))
+                                      .finally(() => setPending(false));
+                                  }
+                                })();
+                              }}
+                            >
+                              <Icon name="trash" />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </div>
   );
 }
+
+function EntryForm({
+  draft,
+  pending,
+  submitLabel,
+  sourceRef,
+  onChange,
+  onSubmit,
+  onCancel,
+}: {
+  draft: Draft;
+  pending: boolean;
+  submitLabel: string;
+  sourceRef: RefObject<HTMLInputElement | null>;
+  onChange: (draft: Draft) => void;
+  onSubmit: (event: FormEvent) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form className="side-form dictionary-form" onSubmit={onSubmit}>
+      <label>
+        Слово или фраза
+        <input
+          ref={sourceRef}
+          aria-label="Слово или фраза"
+          data-dictionary-source=""
+          autoComplete="off"
+          placeholder="Как в книге"
+          value={draft.sourceText}
+          disabled={pending}
+          onChange={(event) => onChange({ ...draft, sourceText: event.target.value })}
+        />
+      </label>
+      <label>
+        Перевод
+        <input
+          aria-label="Перевод слова"
+          data-dictionary-translation=""
+          autoComplete="off"
+          placeholder="Как перевести"
+          value={draft.translatedText}
+          disabled={pending}
+          onChange={(event) => onChange({ ...draft, translatedText: event.target.value })}
+        />
+      </label>
+      <label>
+        Комментарий
+        <input
+          aria-label="Комментарий"
+          data-dictionary-note=""
+          autoComplete="off"
+          placeholder="Необязательно"
+          value={draft.note}
+          disabled={pending}
+          onChange={(event) => onChange({ ...draft, note: event.target.value })}
+        />
+      </label>
+      <div className="actions">
+        <button
+          type="submit"
+          className="primary"
+          disabled={pending || draft.sourceText.trim() === "" || draft.translatedText.trim() === ""}
+        >
+          {submitLabel}
+        </button>
+        <button type="button" disabled={pending} onClick={onCancel}>
+          Отмена
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function wordCountLabel(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) {
+    return `${count} слово`;
+  }
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return `${count} слова`;
+  }
+  return `${count} слов`;
+}
+

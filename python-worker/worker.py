@@ -20,10 +20,12 @@ PARAGRAPH_GAP_RATIO = 1.2
 PARAGRAPH_INDENT = 0.016
 SAME_LINE_OVERLAP = 0.5
 SAME_LINE_GAP = 0.025
+BASELINE_CENTER = 0.55
 COLUMN_OVERLAP = 0.4
 BANNER_WIDTH_RATIO = 1.45
 BANNER_MIN_WIDTH = 0.5
-HEIGHT_RATIO = 1.8
+FONT_SIZE_RATIO = 1.5
+OCR_HEIGHT_RATIO = 2.5
 MAX_TRANSLATION_TOKENS = 160
 _engine = None
 _translator = None
@@ -62,6 +64,9 @@ def handle(message):
         return translate_text(message.get("payload"))
     if command == "warm_translator":
         return warm_translator()
+    if command == "install_models":
+        from model_manager import install_models
+        return install_models()
     return error("UNKNOWN_COMMAND", "Unknown command")
 
 
@@ -123,8 +128,8 @@ def page_lines(page, width, height):
         if block.get("type") != 0:
             continue
         for line in block.get("lines", []):
-            text = "".join(str(span.get("text", "")) for span in line.get("spans") or [])
-            text = " ".join(text.split())
+            spans = line.get("spans") or []
+            text = " ".join("".join(str(span.get("text", "")) for span in spans).split())
             if text == "" or not any(char.isalnum() for char in text):
                 continue
             bbox = line.get("bbox")
@@ -134,6 +139,9 @@ def page_lines(page, width, height):
             if box is None:
                 continue
             box["text"] = text
+            size = dominant_size((span.get("size"), span.get("text", "")) for span in spans)
+            if size is not None:
+                box["size"] = size
             lines.append(box)
     return lines
 
@@ -178,6 +186,8 @@ def paragraphs_from_lines(lines):
     for column in cluster_columns(body):
         blocks.extend(group_column(column))
     blocks.sort(key=lambda block: (block["y"], block["x"]))
+    for block in blocks:
+        block.pop("size", None)
     return blocks
 
 
@@ -201,13 +211,31 @@ def merge_same_lines(lines):
 
 
 def same_line_distance(group, line):
-    box = union_box(group)
+    best = None
+    for item in group:
+        box = line_box(item)
+        if not same_baseline(box, line, item["height"]):
+            continue
+        distance = horizontal_distance(box, line)
+        if distance is None:
+            continue
+        if best is None or distance < best:
+            best = distance
+    return best
+
+
+def same_baseline(box, line, ref_height):
     line_h = max(line["height"], 1e-6)
-    heights = sorted(item["height"] for item in group)
-    para_h = max(heights[len(heights) // 2], 1e-6)
+    ref = max(ref_height, 1e-6)
+    center_line = line["y"] + line["height"] / 2
+    center_box = (box["top"] + box["bottom"]) / 2
+    if abs(center_line - center_box) <= BASELINE_CENTER * max(line_h, ref):
+        return True
     overlap_y = min(box["bottom"], line["y"] + line["height"]) - max(box["top"], line["y"])
-    if overlap_y / min(line_h, para_h) < SAME_LINE_OVERLAP:
-        return None
+    return overlap_y / min(line_h, ref) >= SAME_LINE_OVERLAP
+
+
+def horizontal_distance(box, line):
     overlap_x = min(box["right"], line["x"] + line["width"]) - max(box["left"], line["x"])
     if overlap_x > 0:
         return 0.0
@@ -218,6 +246,15 @@ def same_line_distance(group, line):
     if gap_x <= SAME_LINE_GAP:
         return gap_x
     return None
+
+
+def line_box(line):
+    return {
+        "left": line["x"],
+        "top": line["y"],
+        "right": line["x"] + line["width"],
+        "bottom": line["y"] + line["height"],
+    }
 
 
 def cluster_columns(lines):
@@ -259,33 +296,59 @@ def group_column(lines):
 
 
 def continuation_gap(group, line):
-    box = union_box(group)
-    line_h = max(line["height"], 1e-6)
+    for item in group:
+        if same_baseline(line_box(item), line, item["height"]) and horizontal_distance(line_box(item), line) is not None:
+            return 0.0
+    previous = max(group, key=lambda item: (item["y"] + item["height"] / 2, item["x"]))
     heights = sorted(item["height"] for item in group)
     para_h = max(heights[len(heights) // 2], 1e-6)
-    overlap_y = min(box["bottom"], line["y"] + line["height"]) - max(box["top"], line["y"])
-    if overlap_y / min(line_h, para_h) >= SAME_LINE_OVERLAP:
-        overlap_x = min(box["right"], line["x"] + line["width"]) - max(box["left"], line["x"])
-        gap_x = line["x"] - box["right"] if line["x"] >= box["left"] else box["left"] - (line["x"] + line["width"])
-        if overlap_x > 0 or gap_x <= SAME_LINE_GAP:
-            return 0.0
+    prev_center = previous["y"] + previous["height"] / 2
+    line_center = line["y"] + line["height"] / 2
+    if line_center <= prev_center:
         return None
-    if line["y"] < box["bottom"] - 0.45 * line_h:
+    gap = line["y"] - (prev_center + para_h / 2)
+    if gap > para_h * PARAGRAPH_GAP_RATIO:
         return None
-    gap = line["y"] - box["bottom"]
-    if gap > max(line_h, para_h) * PARAGRAPH_GAP_RATIO:
+    if horizontal_overlap(union_box(group), line) < 0.35:
         return None
-    if horizontal_overlap(box, line) < 0.35:
+    if different_style_size(group, line):
         return None
-    if line_h > para_h * HEIGHT_RATIO or para_h > line_h * HEIGHT_RATIO:
-        return None
-    previous = group[-1]
     widths = sorted(item["width"] for item in group)
     median_width = widths[len(widths) // 2]
     body_left = min(item["x"] for item in group)
     if line["x"] - body_left > PARAGRAPH_INDENT and previous["width"] < median_width * 0.8:
         return None
-    return max(gap, 0.0)
+    return max(line_center - prev_center, 0.0)
+
+
+def different_style_size(group, line):
+    group_size = dominant_size((item.get("size"), item.get("text", "")) for item in group)
+    line_size = line.get("size")
+    if group_size is not None and isinstance(line_size, (int, float)) and not isinstance(line_size, bool) and line_size > 0:
+        return line_size > group_size * FONT_SIZE_RATIO or group_size > line_size * FONT_SIZE_RATIO
+    line_h = max(line["height"], 1e-6)
+    heights = sorted(item["height"] for item in group)
+    para_h = max(heights[len(heights) // 2], 1e-6)
+    return line_h > para_h * OCR_HEIGHT_RATIO or para_h > line_h * OCR_HEIGHT_RATIO
+
+
+def dominant_size(items):
+    weighted = []
+    for size, text in items:
+        if isinstance(size, bool) or not isinstance(size, (int, float)) or size <= 0:
+            continue
+        weight = max(len(str(text).strip()), 1)
+        weighted.append((float(size), weight))
+    if not weighted:
+        return None
+    weighted.sort()
+    total = sum(weight for _size, weight in weighted)
+    acc = 0.0
+    for size, weight in weighted:
+        acc += weight
+        if acc >= total / 2:
+            return round(size, 2)
+    return round(weighted[-1][0], 2)
 
 
 def horizontal_overlap(box, line):
@@ -322,13 +385,34 @@ def merge_paragraph(lines):
     ]
     if scores:
         block["confidence"] = round(sum(scores) / len(scores), 4)
+    size = dominant_size((item.get("size"), item.get("text", "")) for item in ordered)
+    if size is not None:
+        block["size"] = size
     return block
+
+
+def reading_order(lines):
+    rows = []
+    for line in sorted(lines, key=lambda item: (item["y"] + item["height"] / 2, item["x"])):
+        row_index = None
+        for index, row in enumerate(rows):
+            if any(same_baseline(line_box(item), line, item["height"]) for item in row):
+                row_index = index
+                break
+        if row_index is None:
+            rows.append([line])
+        else:
+            rows[row_index].append(line)
+    ordered = []
+    for row in rows:
+        ordered.extend(sorted(row, key=lambda item: item["x"]))
+    return ordered
 
 
 def join_line_texts(lines):
     result = ""
     previous = None
-    for line in lines:
+    for line in reading_order(lines):
         text = " ".join(str(line["text"]).split())
         if text == "":
             continue
@@ -345,9 +429,7 @@ def join_line_texts(lines):
 
 
 def same_visual_line(left, right):
-    overlap = min(left["y"] + left["height"], right["y"] + right["height"]) - max(left["y"], right["y"])
-    shorter = min(left["height"], right["height"])
-    return shorter > 0 and overlap / shorter >= SAME_LINE_OVERLAP
+    return same_baseline(line_box(left), right, left["height"])
 
 
 def dehyphenate(previous, text):
@@ -589,14 +671,31 @@ def ocr_engine():
         return _engine
     from paddleocr import PaddleOCR
 
+    options = {}
+    configured_root = os.environ.get("LLR_MODEL_ROOT", "").strip()
+    if configured_root:
+        root = Path(configured_root) / "ocr"
+        if not all((root / part / "inference.pdiparams").is_file() for part in ("det", "rec")):
+            raise FileNotFoundError("Модели OCR не установлены. Откройте «Модели» в приложении.")
+        options = {
+            "text_detection_model_name": "PP-OCRv5_mobile_det",
+            "text_detection_model_dir": str(root / "det"),
+            "text_recognition_model_name": "en_PP-OCRv5_mobile_rec",
+            "text_recognition_model_dir": str(root / "rec"),
+            "device": "cpu",
+        }
+
     try:
         _engine = PaddleOCR(
             lang="en",
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
+            **options,
         )
     except TypeError:
+        if options:
+            raise
         _engine = PaddleOCR(lang="en")
     try:
         sys.stderr.write("ocr-engine-ready\n")
@@ -719,6 +818,11 @@ def translation_model_dir():
     override = os.environ.get("LLR_TRANSLATION_MODEL", "").strip()
     if override:
         return Path(override)
+    model_root = os.environ.get("LLR_MODEL_ROOT", "").strip()
+    if model_root:
+        directory = Path(model_root) / "en-ru"
+        if (directory / "model.bin").is_file() or os.environ.get("LLR_BUNDLED_RUNTIME"):
+            return directory
     return Path(__file__).resolve().parent / "models" / "en-ru"
 
 

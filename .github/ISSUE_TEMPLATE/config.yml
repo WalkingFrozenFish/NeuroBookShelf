@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Установка и скачивание
+    url: https://github.com/WalkingFrozenFish/NeuroBookShelf/blob/master/DISTRIBUTION.md
+    about: Установщики, portable-версия, macOS и загрузка моделей.
+  - name: Уязвимость безопасности
+    url: https://github.com/WalkingFrozenFish/NeuroBookShelf/security/policy
+    about: Сначала прочитайте порядок конфиденциального сообщения об уязвимости.

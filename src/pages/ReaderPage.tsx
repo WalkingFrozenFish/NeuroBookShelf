@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { confirmAction } from "../confirm";
 import { Icon } from "../icons";
 import {
   AnnotationMode,
-  getDocument,
   type PDFDocumentProxy,
   type RenderTask,
 } from "pdfjs-dist";
@@ -13,13 +12,19 @@ import {
   readDocumentPdf,
   saveReadingState,
 } from "../libraryApi";
-import "../pdfSetup";
+import { openPdf } from "../pdfSetup";
 import { translateSelectedRegion } from "./ReaderOcr";
 import { ReaderPageTranslate } from "./ReaderPageTranslate";
 import { ReaderSidePanel } from "./ReaderSidePanel";
 import { PageArea, SelectionLayer } from "./SelectionLayer";
 import { TranslationOverlay } from "./TranslationOverlay";
 import { TranslationBlockRecord } from "../libraryApi";
+import { PdfNavigation } from "./PdfNavigation";
+import { PdfTextLayer } from "./PdfTextLayer";
+import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils";
+import type { TextMatch } from "../pdfText";
+import { translationQueue } from "../translationQueue";
+import { scrollWithinPanel } from "../scrollWithinPanel";
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
@@ -63,12 +68,19 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
   const regionBusy = useRef(false);
   const [highlight, setHighlight] = useState<(PageArea & { id: number }) | null>(null);
   const [blocksVersion, setBlocksVersion] = useState(0);
+  const [dictionaryRequest, setDictionaryRequest] = useState(0);
   const [overlay, setOverlay] = useState(false);
-  const [hiddenPopups, setHiddenPopups] = useState<number[]>([]);
   const [soloPopup, setSoloPopup] = useState<number | null>(null);
   const [thumbWidth, setThumbWidth] = useState(THUMB_MIN);
-  const [sideWidth, setSideWidth] = useState(SIDE_MIN);
+  const [sideWidth, setSideWidth] = useState(SIDE_MAX);
   const [thumbPaintWidth, setThumbPaintWidth] = useState(THUMB_MIN);
+  const [pagesOpen, setPagesOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchMatch, setSearchMatch] = useState<TextMatch | null>(null);
+  const [searchRequest, setSearchRequest] = useState(0);
+  const translationRevision = useSyncExternalStore(translationQueue.subscribe, translationQueue.getRevision);
+  const openNavigation = useCallback(() => setPagesOpen(true), []);
+  const [narrowLayout, setNarrowLayout] = useState(() => window.matchMedia("(max-width: 980px)").matches);
   const queueRef = useRef(Promise.resolve());
   const pageDirtyRef = useRef(false);
   const anyDirtyRef = useRef(false);
@@ -121,15 +133,32 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
 
   async function goToPage(next: number) {
     if (next === pageNumber || next < 1 || next > pageCount) {
-      return;
+      return false;
     }
     if (
       pageDirtyRef.current &&
       !(await confirmAction("Есть несохранённый текст заметки этой страницы. Перейти без сохранения?"))
     ) {
-      return;
+      return false;
     }
     setPageNumber(next);
+    return true;
+  }
+
+  function chooseMapPage(next: number) {
+    if (!narrowLayout) {
+      void goToPage(next);
+      return;
+    }
+    if (next === pageNumber) {
+      setPagesOpen(false);
+      return;
+    }
+    void goToPage(next).then((moved) => {
+      if (moved) {
+        setPagesOpen(false);
+      }
+    });
   }
 
   function dismissPageSelection() {
@@ -166,10 +195,14 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
     }
 
     let cancelled = false;
-    const loadingTask = { current: null as ReturnType<typeof getDocument> | null };
+    const loadingTask = { current: null as ReturnType<typeof openPdf> | null };
     setLoading(true);
     setError("");
     setPdf(null);
+    setPagesOpen(false);
+    setSearchQuery("");
+    setSearchMatch(null);
+    setSearchRequest(0);
 
     async function open() {
       try {
@@ -184,7 +217,7 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
         if (cancelled) {
           return;
         }
-        const task = getDocument({ data: toBytes(payload) });
+        const task = openPdf(toBytes(payload));
         loadingTask.current = task;
         const document = await task.promise;
         if (cancelled) {
@@ -219,9 +252,33 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
   useEffect(() => {
     setSelection(null);
     setHighlight(null);
-    setHiddenPopups([]);
     setSoloPopup(null);
   }, [documentId, pageNumber]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 980px)");
+    function onChange() {
+      setNarrowLayout(media.matches);
+      if (!media.matches) {
+        setPagesOpen(false);
+      }
+    }
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!pagesOpen) {
+      return;
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setPagesOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pagesOpen]);
 
   useEffect(() => {
     regionToken.current += 1;
@@ -253,7 +310,6 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
         return;
       }
       setBlocksVersion((current) => current + 1);
-      setHiddenPopups((current) => current.filter((item) => item !== block.id));
       setSoloPopup(block.id);
       setOverlay(true);
       dismissPageSelection();
@@ -335,6 +391,8 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           {title}
         </strong>
         <div className="reader-tools" role="toolbar" aria-label="Инструменты страницы">
+          <button type="button" className="icon-only" aria-label="Поиск по книге" title="Поиск по книге (Ctrl+F)" onClick={() => setSearchRequest((value) => value + 1)}><Icon name="search" /></button>
+          <button type="button" className={overlay ? "icon-only active" : "icon-only"} aria-label="Показать переводы" title="Показать / скрыть переводы" aria-pressed={overlay} onClick={() => { setOverlay(!overlay); setSoloPopup(null); }}><Icon name="overlay" /></button>
           <button
             type="button"
             className={selectionMode ? "icon-only active" : "icon-only"}
@@ -352,35 +410,27 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           >
             <Icon name="select" />
           </button>
-          <button
-            type="button"
-            className={overlay ? "icon-only active" : "icon-only"}
-            aria-label={overlay ? "Скрыть все переводы" : "Показать все переводы"}
-            title={overlay ? "Скрыть все переводы" : "Показать все переводы"}
-            aria-pressed={overlay}
-            onClick={() => {
-              setOverlay((current) => !current);
-              setHiddenPopups([]);
-              setSoloPopup(null);
-            }}
-          >
-            <Icon name={overlay ? "popups-off" : "popups"} />
-          </button>
           <ReaderPageTranslate
             documentId={documentId}
+            title={title}
             pageNumber={pageNumber}
-            onBlocksChanged={() => setBlocksVersion((current) => current + 1)}
-            onShowOverlay={() => {
-              setSoloPopup(null);
-              setHiddenPopups([]);
-              setOverlay(true);
-            }}
-            onTranslated={dismissPageSelection}
+            pageCount={pageCount}
           />
         </div>
       </header>
-      <aside className="thumbs" aria-label="Страницы">
-        <div className="thumbs-scroll">
+      <aside
+        className={pagesOpen ? "thumbs is-open" : "thumbs"}
+        aria-label="Страницы"
+        aria-hidden={narrowLayout && !pagesOpen ? true : undefined}
+        inert={narrowLayout && !pagesOpen ? true : undefined}
+      >
+        <div className="thumbs-head">
+          <strong>Страницы</strong>
+          <button type="button" className="thumbs-close" aria-label="Закрыть карту страниц" onClick={() => setPagesOpen(false)}>
+            <Icon name="clear" />
+          </button>
+        </div>
+        <PdfNavigation pdf={pdf} pageNumber={pageNumber} onOpenPage={goToPage} onMatch={setSearchMatch} onQueryChange={setSearchQuery} onOpenPanel={openNavigation} searchRequest={searchRequest}>
         {Array.from({ length: pageCount }, (_, index) => {
           const number = index + 1;
           return (
@@ -391,11 +441,11 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
               active={number === pageNumber}
               pixels={thumbPixels}
               enqueue={enqueue}
-              onSelect={goToPage}
+              onSelect={chooseMapPage}
             />
           );
         })}
-        </div>
+        </PdfNavigation>
         <div
           className="thumbs-resize"
           role="separator"
@@ -411,6 +461,24 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
         </div>
       </aside>
       <div className="page-stage">
+        <button
+          type="button"
+          className="pages-toggle"
+          aria-label="Карта страниц"
+          aria-expanded={pagesOpen}
+          onClick={() => setPagesOpen(true)}
+        >
+          <Icon name="page" />
+          <span className="sr-only">Карта страниц</span>
+        </button>
+        {pagesOpen ? (
+          <button
+            type="button"
+            className="pages-backdrop"
+            aria-label="Закрыть карту страниц"
+            onClick={() => setPagesOpen(false)}
+          />
+        ) : null}
         <div className="reader-notices">
           {error ? (
             <div className="reader-notice is-error" role="status">
@@ -426,6 +494,8 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           documentId={documentId}
           pageNumber={pageNumber}
           zoom={zoom}
+          searchQuery={searchQuery}
+          searchMatch={searchMatch}
           onScale={setResolvedScale}
           selectionMode={selectionMode}
           selection={selection}
@@ -436,13 +506,18 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
           onTranslate={() => void translateSelection()}
           highlight={highlight}
           overlay={overlay}
-          blocksVersion={blocksVersion}
+          blocksVersion={blocksVersion + translationRevision}
           highlightedId={highlight?.id ?? null}
-          hiddenPopups={hiddenPopups}
           soloPopup={soloPopup}
           onOverlaySelect={selectBlock}
-          onHidePopup={(id) => setHiddenPopups((current) => (current.includes(id) ? current : [...current, id]))}
+          onPopupCollapsed={(id) => setHighlight((current) => (current?.id === id ? null : current))}
           onPopupSaved={() => setBlocksVersion((current) => current + 1)}
+          onAddedToDictionary={() => setDictionaryRequest((current) => current + 1)}
+          onTogglePopups={() => {
+            setOverlay((current) => !current);
+            setSoloPopup(null);
+            setHighlight(null);
+          }}
         />
         <div className="viewer-bar" aria-label="Просмотр страницы">
           <button
@@ -512,20 +587,19 @@ export function ReaderPage({ documentId, registerLeaveGuard }: Props) {
         pageNumber={pageNumber}
         onOpenPage={goToPage}
         onDirtyChange={onDirtyChange}
-        blocksVersion={blocksVersion}
+        blocksVersion={blocksVersion + translationRevision}
         highlightedId={highlight?.id ?? null}
         onHighlight={selectBlock}
         onShowOverlay={() => {
           setSoloPopup(null);
-          setHiddenPopups([]);
           setOverlay(true);
         }}
         onShowPopup={(id) => {
-          setHiddenPopups((current) => current.filter((item) => item !== id));
           setSoloPopup(id);
           setOverlay(true);
         }}
         onBlocksChanged={() => setBlocksVersion((current) => current + 1)}
+        dictionaryRequest={dictionaryRequest}
       />
     </section>
   );
@@ -536,6 +610,8 @@ function PageView({
   documentId,
   pageNumber,
   zoom,
+  searchQuery,
+  searchMatch,
   onScale,
   selectionMode,
   selection,
@@ -548,16 +624,19 @@ function PageView({
   overlay,
   blocksVersion,
   highlightedId,
-  hiddenPopups,
   soloPopup,
   onOverlaySelect,
-  onHidePopup,
+  onPopupCollapsed,
   onPopupSaved,
+  onAddedToDictionary,
+  onTogglePopups,
 }: {
   pdf: PDFDocumentProxy;
   documentId: number;
   pageNumber: number;
   zoom: Zoom;
+  searchQuery: string;
+  searchMatch: TextMatch | null;
   onScale: (scale: number) => void;
   selectionMode: boolean;
   selection: PageArea | null;
@@ -570,16 +649,18 @@ function PageView({
   overlay: boolean;
   blocksVersion: number;
   highlightedId: number | null;
-  hiddenPopups: number[];
   soloPopup: number | null;
   onOverlaySelect: (block: TranslationBlockRecord) => void;
-  onHidePopup: (id: number) => void;
+  onPopupCollapsed: (id: number) => void;
   onPopupSaved: () => void;
+  onAddedToDictionary: () => void;
+  onTogglePopups: () => void;
 }) {
   const viewRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [box, setBox] = useState({ width: 0, height: 0 });
   const [pageError, setPageError] = useState("");
+  const [textViewport, setTextViewport] = useState<{ pageNumber: number; viewport: PageViewport } | null>(null);
 
   useEffect(() => {
     const node = viewRef.current;
@@ -589,11 +670,7 @@ function PageView({
     const measure = () => {
       const width = node.clientWidth;
       const height = node.clientHeight;
-      setBox((current) =>
-        Math.abs(current.width - width) < 2 && Math.abs(current.height - height) < 2
-          ? current
-          : { width, height },
-      );
+      setBox((current) => (current.width === width && current.height === height ? current : { width, height }));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -608,6 +685,7 @@ function PageView({
     }
     const state = { cancelled: false, task: null as RenderTask | null };
     setPageError("");
+    setTextViewport(null);
 
     async function draw() {
       const page = await pdf.getPage(pageNumber);
@@ -636,6 +714,10 @@ function PageView({
       canvas!.height = Math.ceil(viewport.height);
       canvas!.style.width = `${fitted.width}px`;
       canvas!.style.height = `${fitted.height}px`;
+      if (view && zoom.mode !== "scale") {
+        trimPageToView(view, canvas!, zoom.mode === "fit-page" || fitted.height <= availableHeight);
+      }
+      setTextViewport({ pageNumber, viewport: page.getViewport({ scale: Number.parseFloat(canvas!.style.width) / base.width }) });
       state.task = page.render({ canvas: canvas!, viewport, annotationMode: AnnotationMode.ENABLE });
       try {
         await state.task.promise;
@@ -648,7 +730,7 @@ function PageView({
       }
     }
 
-    void draw();
+    void draw().catch((failure) => { if (!state.cancelled) setPageError(errorText(failure)); });
     return () => {
       state.cancelled = true;
       state.task?.cancel();
@@ -656,9 +738,25 @@ function PageView({
   }, [pdf, pageNumber, zoom, box.width, box.height, onScale]);
 
   return (
-    <div className="page-view" ref={viewRef}>
-      <div className="page-frame">
+    <div className="page-view" data-zoom={zoom.mode} ref={viewRef}>
+      <div
+        className="page-frame"
+        onClick={(event) => {
+          if (selectionMode) {
+            return;
+          }
+          const target = event.target;
+          if (!(target instanceof Element)) {
+            return;
+          }
+          if (target.closest(".translation-popup, .selection-actions, .pdf-text-layer span") || window.getSelection()?.toString()) {
+            return;
+          }
+          onTogglePopups();
+        }}
+      >
         <canvas ref={canvasRef} />
+        {textViewport?.pageNumber === pageNumber && <PdfTextLayer key={`${documentId}-${pageNumber}`} pdf={pdf} pageNumber={pageNumber} viewport={textViewport.viewport} query={searchQuery} activeMatch={searchMatch} onError={setPageError} />}
         <SelectionLayer
           key={pageNumber}
           active={selectionMode}
@@ -691,11 +789,11 @@ function PageView({
             pageNumber={pageNumber}
             blocksVersion={blocksVersion}
             highlightedId={highlightedId}
-            hiddenIds={hiddenPopups}
             soloId={soloPopup}
             onSelect={onOverlaySelect}
-            onHide={onHidePopup}
+            onCollapse={onPopupCollapsed}
             onSaved={onPopupSaved}
+            onAddedToDictionary={onAddedToDictionary}
           />
         ) : null}
       </div>
@@ -727,7 +825,9 @@ function Thumbnail({
     if (!active) {
       return;
     }
-    buttonRef.current?.scrollIntoView({ block: "nearest" });
+    const button = buttonRef.current;
+    const panel = button?.closest<HTMLElement>(".thumbs-scroll");
+    if (button && panel) scrollWithinPanel(button, panel);
   }, [active]);
 
   useEffect(() => {
@@ -902,14 +1002,36 @@ function fitPageBox(
   availableWidth: number,
   availableHeight: number,
 ): { width: number; height: number } {
-  if (mode !== "fit-page") {
-    return { width, height };
-  }
-  const nudge = Math.min(1, availableWidth / width, availableHeight / height);
+  const nudge =
+    mode === "fit-page" ? Math.min(1, availableWidth / width, availableHeight / height) : 1;
   return {
-    width: Math.floor(width * nudge),
-    height: Math.floor(height * nudge),
+    width: Math.max(1, Math.floor(width * nudge)),
+    height: Math.max(1, Math.floor(height * nudge)),
   };
+}
+
+function trimPageToView(view: HTMLElement, canvas: HTMLCanvasElement, allowY: boolean) {
+  for (let step = 0; step < 3; step += 1) {
+    const extraX = view.scrollWidth - view.clientWidth;
+    const extraY = allowY ? view.scrollHeight - view.clientHeight : 0;
+    if (extraX <= 0 && extraY <= 0) {
+      return;
+    }
+    const width = Number.parseFloat(canvas.style.width);
+    const height = Number.parseFloat(canvas.style.height);
+    if (!(width > 0) || !(height > 0)) {
+      return;
+    }
+    const factor = Math.min(
+      extraX > 0 ? (width - extraX) / width : 1,
+      extraY > 0 ? (height - extraY) / height : 1,
+    );
+    if (!(factor > 0) || factor >= 1) {
+      return;
+    }
+    canvas.style.width = `${Math.max(1, Math.floor(width * factor))}px`;
+    canvas.style.height = `${Math.max(1, Math.floor(height * factor))}px`;
+  }
 }
 
 function resolveScale(
