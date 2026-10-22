@@ -2,7 +2,7 @@
 
 **English** · [Русский](GUIDE.md) · [Project home](../README.md)
 
-This guide describes the development version. The published **0.1.0** release has an English → Russian translator and an older settings layout. Language switching, additional translation pairs and the settings tabs below will arrive in the next release.
+A guide to **NeuroBookShelf 0.2.0**: installation, reading, local models and data.
 
 ## Install and start reading
 
@@ -35,14 +35,14 @@ Open **Settings** at the bottom of the library sidebar. The four tabs separate e
 
 The language switch takes effect immediately and is saved on this computer. It is independent of the source and target languages used for translation. Tabs also support Left/Right arrow keys, Home and End.
 
-![Appearance settings in the development version](images/settings-en.png)
+![Appearance settings in the version 0.2.0](images/settings-en.png)
 
 Choose a preset palette or select a custom color and press **Apply color**. The primary hue follows your selection; brightness adapts to light or dark mode. PDF **Original**, **Dimmed** and **Night** modes change display only. Night mode can alter illustration colors; exported PDFs keep their original appearance.
 
 ## Models, OCR and translation
 
 1. Open **Settings → OCR & translation** while online. Download the OCR model if you need scanned English pages, and the translation pairs you need.
-2. The development catalog includes **English ↔ Russian** and **French ↔ English**. Choose source and target languages in the translation controls; automatic source detection is also available. The app selects installed models and can route via an intermediate language when the required pairs are installed.
+2. The catalog includes **English ↔ Russian** and **French ↔ English**. Choose source and target languages in the translation controls; automatic source detection is also available. The app selects installed models and can route via an intermediate language when the required pairs are installed.
 3. Open a book and translate a selected region or a page. An existing PDF text layer is used when available. OCR currently recognizes **English only**; French and other supported translation languages require a text layer.
 4. For several pages, add a page range to the background translation queue. You can keep reading, cancel a job or retry errors. The queue does not resume after an app restart; saved translations remain.
 

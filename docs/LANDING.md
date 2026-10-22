@@ -2,7 +2,9 @@
 
 Исходники — `site/index.html` (русский), `site/en/index.html` (английский), общий `site/style.css` и `site/assets/`. Переключатель RU/EN использует обычные ссылки и работает без JavaScript. Обе страницы содержат title, description, canonical и hreflang; robots.txt и sitemap.xml включены.
 
-Лендинг честно разделяет опубликованную 0.1.0 и возможности следующего выпуска. После нового Release обновляйте обе страницы вместе с README.
+Лендинг описывает возможности 0.2.0. После нового Release обновляйте обе страницы вместе с README.
+
+Адрес сайта: [русский](https://walkingfrozenfish.github.io/NeuroBookShelf/) / [English](https://walkingfrozenfish.github.io/NeuroBookShelf/en/). Ссылка доступна в About → Website репозитория и в начале обоих README.
 
 ## Публикация
 

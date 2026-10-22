@@ -14,11 +14,11 @@ Get the [latest release](https://github.com/WalkingFrozenFish/NeuroBookShelf/rel
 
 Python, OCR libraries and the translation engine are included. Git, Node.js, Rust and pip are not needed to use the app. The Windows installer installs WebView2 if it is missing; this requires internet access.
 
-The published 0.1.0 release supports English → Russian translation and English OCR. Model files require about 199 MiB of initial downloads. You can skip this and read PDFs immediately. After model installation, OCR and translation work locally without an internet connection.
+Version 0.2.0 supports downloadable translation pairs and English OCR. The default English → Russian and OCR setup is optional. Model files require about 199 MiB of initial downloads. You can skip this and read PDFs immediately. After model installation, OCR and translation work locally without an internet connection.
 
-## Models in the next release
+## Models in 0.2.0
 
-These features are in the development version and require a new application release:
+Open the model catalog in the installed application:
 
 - Open **Settings → OCR & translation**.
 - Choose a source language, or automatic detection, and the target language.

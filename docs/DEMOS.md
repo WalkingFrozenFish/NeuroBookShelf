@@ -4,7 +4,7 @@
 
 ## Русский
 
-Анимация показывает библиотеку, чтение PDF, поиск через Ctrl+F, переход к сканированной странице и фоновый OCR с переводом English → Russian. Это рабочая версия, а не опубликованный 0.1.0.
+Анимация показывает библиотеку, чтение PDF, поиск через Ctrl+F, переход к сканированной странице и фоновый OCR с переводом English → Russian. Записанный интерфейс включён в 0.2.0.
 
 Для записи создан собственный тестовый PDF: первая страница содержит текст, вторая — растровую копию без текстового слоя. PaddleOCR распознаёт вторую страницу; CTranslate2 с установленной моделью en-ru переводит полученные фрагменты. Использованы настоящие ответы упакованного Python worker.
 
@@ -14,7 +14,7 @@
 
 ## English
 
-The animation shows the library, PDF reading, Ctrl+F search, a scanned page and background OCR with English → Russian translation. It features the development version rather than the published 0.1.0 release.
+The animation shows the library, PDF reading, Ctrl+F search, a scanned page and background OCR with English → Russian translation. The recorded interface is included in 0.2.0.
 
 A purpose-made sample PDF contains a text page followed by its rasterized copy with no text layer. PaddleOCR recognizes the second page; CTranslate2 with the installed en-ru model translates the recognized fragments. The results are actual responses from the bundled Python worker.
 
