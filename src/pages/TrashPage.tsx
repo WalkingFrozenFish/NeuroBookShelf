@@ -2,6 +2,7 @@ import { locale, t } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { AnnotationMode, type RenderTask } from "pdfjs-dist";
 import { Icon } from "../icons";
+import { EmptyState } from "../EmptyState";
 import {
   DocumentRecord,
   errorText,
@@ -171,6 +172,7 @@ export function TrashPage({ onLibraryChanged }: { onLibraryChanged?: () => Promi
           </label>
         ) : null}
       </header>
+      <p className="trash-description">{t("Здесь можно восстановить книги или удалить их навсегда.")}</p>
       {error ? <p className="error">{error}</p> : null}
       {documents && documents.length > 0 && (visible.length > 0 || selected.size > 0) ? (
         <div className="trash-select-bar">
@@ -218,9 +220,12 @@ export function TrashPage({ onLibraryChanged }: { onLibraryChanged?: () => Promi
       {documents === null ? (
         <p>{t("Загрузка корзины…")}</p>
       ) : documents.length === 0 ? (
-        <p>{t("Удалённых документов нет.")}</p>
+        <EmptyState icon="trash" title={t("Удалённых документов нет.")}>{t("Книги, перемещённые в корзину, появятся здесь. Их можно будет восстановить.")}</EmptyState>
       ) : visible.length === 0 ? (
-        <p>{t("Ничего не найдено.")}</p>
+        <EmptyState icon="search" title={t("Ничего не найдено.")}
+          action={<button type="button" onClick={() => setQuery("")}>{t("Сбросить фильтры")}</button>}>
+          {t("Попробуйте другой запрос или сбросьте фильтры.")}
+        </EmptyState>
       ) : (
         <ul className="trash-list">
           {visible.map((document) => (

@@ -96,6 +96,9 @@ try {
   });
   await page.goto(process.env.LLR_TEST_URL || 'http://localhost:1420');
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: 'Читалка', exact: true }).click();
+  await page.getByRole('heading', { name: 'Выберите книгу для чтения', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Открыть библиотеку', exact: true }).click();
   await page.getByRole('button', { name: 'Читать', exact: true }).click();
   await page.waitForSelector('.pdf-text-layer span');
   // A partially rendered white bitmap must stay hidden behind the theme's fill.
@@ -279,7 +282,8 @@ try {
   await page.waitForFunction(() => window.__testTranslationSettings.targetLanguage === 'en');
   await page.getByRole('searchbox', { name: 'Search models', exact: true }).fill('fr');
   assert.equal(await page.locator('.model-table tbody tr').count(), 1);
-  await page.getByRole('searchbox', { name: 'Search models', exact: true }).fill('');
+  await page.getByRole('button', { name: 'Reset filters', exact: true }).click();
+  assert.equal(await page.locator('.model-table tbody tr').count(), 2);
   await page.screenshot({ path: 'tests/settings-en.png' });
   await page.getByRole('tab', { name: 'General', exact: true }).click();
   await page.getByRole('combobox', { name: 'Interface language', exact: true }).selectOption('ru');
@@ -309,6 +313,11 @@ try {
   await page.getByRole('button', { name: 'Все книги', exact: false }).click();
   await page.getByText('Restorable book', { exact: true }).waitFor();
   assert.equal(await page.locator('.mini-row').first().locator('.count').textContent(), '2');
+  await page.getByRole('searchbox', { name: 'Поиск книг на выбранной полке', exact: true }).fill('no-match-fixture');
+  await page.getByRole('heading', { name: 'Ничего не найдено.', exact: true }).waitFor();
+  assert.equal(await page.locator('[data-dictionary-card]').count(), 0);
+  await page.getByRole('button', { name: 'Сбросить фильтры', exact: true }).click();
+  await page.getByText('Restorable book', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();
   await page.getByRole('tab', { name: 'Общие', exact: true }).waitFor();
   await page.screenshot({ path: 'tests/reader-ui.png' });

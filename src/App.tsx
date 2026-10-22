@@ -124,7 +124,7 @@ function App() {
           />
         )}
         {page === "reader" && (
-          <ReaderPage documentId={documentId} registerLeaveGuard={registerLeaveGuard} appearance={appearance} onAppearance={changeAppearance} appearancePending={appearancePending} />
+          <ReaderPage documentId={documentId} registerLeaveGuard={registerLeaveGuard} appearance={appearance} onAppearance={changeAppearance} appearancePending={appearancePending} onOpenLibrary={() => setPage("library")} />
         )}
         {page === "dictionary" && <DictionaryPage onBack={() => setPage("library")} />}
       </main>

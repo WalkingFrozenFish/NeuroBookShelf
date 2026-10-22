@@ -3963,3 +3963,43 @@ html[data-theme="dark"] :is(.book-cover, .trash-cover) canvas { filter: brightne
   .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-tabs button { justify-content: flex-start; }
 }
+
+/* Library, reader and trash share typography and empty-state treatments. */
+.library-toolbar h1, .trash-toolbar h1 { font-size: 26px; letter-spacing: -0.6px; line-height: 1.25; }
+.library-title .count { padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-variant-numeric: tabular-nums; }
+.library-search input { min-height: 40px; }
+.book-grid { gap: 18px; }
+.book-grid > li { padding: 12px; gap: 10px; transition: border-color 140ms ease, box-shadow 140ms ease; }
+.book-grid > li:hover, .book-grid > li:focus-within { border-color: var(--button-hover-border); box-shadow: 0 4px 18px var(--shadow); }
+.book-cover .book-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; overflow-wrap: anywhere; min-height: 41px; mask-image: none; -webkit-mask-image: none; }
+.book-grid button.book-read { min-height: 38px; }
+button.book-menu { width: 32px; height: 32px; font-size: 20px; }
+.empty-card { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 36px 24px; margin-block: 20px; border: 1px dashed var(--line); border-radius: 14px; background: var(--surface); text-align: center; }
+.empty-card-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: var(--accent-soft); color: var(--accent); }
+.empty-card-icon .icon { width: 25px; height: 25px; }
+.empty-card h2 { margin: 0; font-size: 19px; line-height: 1.4; font-weight: 600; }
+.content .empty-card p { margin: 0; max-width: 54ch; font-size: 14px; line-height: 1.7; color: var(--muted); }
+.empty-card .actions { justify-content: center; margin-top: 4px; }
+.opening-state > .empty-card { width: min(620px, 100%); }
+.trash-toolbar { flex-wrap: wrap; }
+.trash-browser .trash-description { margin-top: -4px; font-size: 13px; }
+.trash-card { border-radius: 12px; }
+.trash-card:focus-within { outline: 1px solid var(--accent); outline-offset: 2px; }
+.trash-select-bar { border-radius: 10px; }
+.reader-title { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.pdf-nav-tabs button, .side-tabs button { min-height: 32px; }
+.model-state { display: inline-flex; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.model-state.ready { background: var(--notice-soft); color: var(--notice); border-color: transparent; }
+.model-catalog-filters { width: 100%; }
+.model-catalog-filters > button { font-size: 12px; }
+.model-result-count { font-variant-numeric: tabular-nums; }
+.model-table th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+@media (max-width: 760px) {
+  .book-grid { grid-template-columns: repeat(auto-fill, minmax(min(185px, 100%), 1fr)); gap: 12px; }
+  .library-toolbar h1, .trash-toolbar h1 { font-size: 23px; }
+  .empty-card { padding: 26px 16px; }
+  .trash-toolbar .library-search { flex-basis: 100%; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .book-grid > li { transition: none; }
+}

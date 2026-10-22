@@ -3,6 +3,7 @@ import { DragEvent, FormEvent, ReactNode, useEffect, useRef, useState } from "re
 import { AnnotationMode, type RenderTask } from "pdfjs-dist";
 import { confirmAction } from "../confirm";
 import { Icon } from "../icons";
+import { EmptyState } from "../EmptyState";
 import { SettingsPage } from "./SettingsPage";
 import { TrashPage } from "./TrashPage";
 import { type Appearance } from "../theme";
@@ -597,8 +598,20 @@ function DocumentsSection({
               <Icon name="import" />
               {t("Импорт PDF")}</button>
           </header>
+          {documents.length === 0 ? (
+            <EmptyState icon="library" title={t("Документов пока нет.")}
+              action={<button type="button" className="primary" disabled={pending} onClick={() => void onImport()}><Icon name="import" />{t("Импорт PDF")}</button>}>
+              {t("Добавьте первый PDF. Оригинал останется на месте, а в библиотеке сохранится копия.")}
+            </EmptyState>
+          ) : visible.length === 0 ? (
+            <EmptyState icon={query || tagFilter !== null ? "search" : "library"}
+              title={query || tagFilter !== null ? t("Ничего не найдено.") : t("На этой полке пока нет книг")}
+              action={query || tagFilter !== null ? <button type="button" onClick={() => { setQuery(""); setTagFilter(null); }}>{t("Сбросить фильтры")}</button> : undefined}>
+              {query || tagFilter !== null ? t("Попробуйте другой запрос или сбросьте фильтры.") : t("Добавьте книги на полку через меню книги или перетащите их на название полки.")}
+            </EmptyState>
+          ) : null}
           <ul className="book-grid">
-          <li className="dictionary-tile" data-dictionary-card="">
+          {!query.trim() && tagFilter === null && <li className="dictionary-tile" data-dictionary-card="">
             <button type="button" className="book-cover dictionary-open" onClick={onOpenDictionary}>
               <span className="dictionary-cover">
                 <span className="dictionary-cover-kicker">EN · RU</span>
@@ -610,7 +623,7 @@ function DocumentsSection({
             <button type="button" className="book-read primary" onClick={onOpenDictionary}>
               <Icon name="dictionary" />
               {t("Открыть")}</button>
-          </li>
+          </li>}
           {visible.map((document) => (
             <li
               key={document.id}
@@ -651,11 +664,7 @@ function DocumentsSection({
             </li>
           ))}
         </ul>
-          {documents.length === 0 ? (
-            <p>{t("Документов пока нет.")}</p>
-          ) : visible.length === 0 ? (
-            <p>{t("Ничего не найдено.")}</p>
-          ) : null}
+
             </>
           )}
         </div>

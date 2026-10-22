@@ -103,7 +103,9 @@ export function ModelSetup() {
     <div className="model-catalog-filters">
       <input type="search" aria-label={t("Поиск моделей")} placeholder={t("Поиск по языку или локали")} value={query} onChange={event => setQuery(event.target.value)} />
       <label><input type="checkbox" checked={installedOnly} onChange={event => setInstalledOnly(event.target.checked)} />{t("Только установленные")}</label>
+      {(query || installedOnly) && <button type="button" onClick={() => { setQuery(""); setInstalledOnly(false); }}>{t("Сбросить фильтры")}</button>}
     </div>
+    {status && <p className="meta model-result-count" aria-live="polite">{t("Показано моделей: {0} из {1}", [filtered.length, catalog.length])}</p>}
     <div className="model-table-scroll">
       <table className="model-table">
         <caption className="sr-only">{t("Доступные модели перевода")}</caption>
@@ -112,7 +114,7 @@ export function ModelSetup() {
           <td>{item.name}</td>
           <td>{languageName(item.source)} → {languageName(item.target)}<small>{item.source} → {item.target}</small></td>
           <td>{item.ready && item.installedVersion ? item.installedVersion : item.version}</td>
-          <td>{item.ready ? t("Установлена") : t("Не установлена")}{usedPairs.includes(item.pair) && <small>{currentlyTranslating ? t("В работе") : t("Использовалась")}</small>}</td>
+          <td><span className={item.ready ? "model-state ready" : "model-state"}>{item.ready ? t("Установлена") : t("Не установлена")}</span>{usedPairs.includes(item.pair) && <small>{currentlyTranslating ? t("В работе") : t("Использовалась")}</small>}</td>
           <td>{item.ready ? <span className="meta">{t("Выбирается автоматически")}</span> : <button type="button" className="primary" disabled={busy || refreshing} onClick={() => void install(item.pair)}>{(installingPair || progress?.pair) === item.pair && busy ? t("Загрузка…") : t("Скачать")}</button>}</td>
         </tr>)}</tbody>
       </table>

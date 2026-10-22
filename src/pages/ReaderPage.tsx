@@ -2,6 +2,7 @@ import { t } from "../i18n";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { confirmAction } from "../confirm";
 import { Icon } from "../icons";
+import { EmptyState } from "../EmptyState";
 import {
   AnnotationMode,
   type PDFDocumentProxy,
@@ -54,10 +55,11 @@ type Props = {
   appearance: Appearance;
   onAppearance: (appearance: Appearance) => Promise<void>;
   appearancePending: boolean;
+  onOpenLibrary: () => void;
   registerLeaveGuard?: (guard: () => boolean | Promise<boolean>) => void;
 };
 
-export function ReaderPage({ documentId, registerLeaveGuard, appearance, onAppearance, appearancePending }: Props) {
+export function ReaderPage({ documentId, registerLeaveGuard, appearance, onAppearance, appearancePending, onOpenLibrary }: Props) {
   const [title, setTitle] = useState("");
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -357,7 +359,10 @@ export function ReaderPage({ documentId, registerLeaveGuard, appearance, onAppea
     return (
       <section className="opening-state">
         <h1>{t("Читалка")}</h1>
-        <p>{t("Документ не открыт. Откройте PDF из библиотеки.")}</p>
+        <EmptyState icon="reader" title={t("Выберите книгу для чтения")}
+          action={<button type="button" className="primary" onClick={onOpenLibrary}><Icon name="library" />{t("Открыть библиотеку")}</button>}>
+          {t("Документ не открыт. Откройте PDF из библиотеки.")}
+        </EmptyState>
       </section>
     );
   }
@@ -367,6 +372,7 @@ export function ReaderPage({ documentId, registerLeaveGuard, appearance, onAppea
       <section className="empty-state">
         <h1>{t("Читалка")}</h1>
         <p className="error">{error}</p>
+        <button type="button" onClick={onOpenLibrary}><Icon name="library" />{t("Открыть библиотеку")}</button>
       </section>
     );
   }

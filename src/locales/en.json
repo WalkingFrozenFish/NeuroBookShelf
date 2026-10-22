@@ -509,5 +509,15 @@
   "Модели OCR и перевода загружаются отдельно во вкладке «OCR и перевод». После установки они работают без сети.": "Download OCR and translation models separately in the OCR & translation tab. Once installed, they work offline.",
   "Сброс данных": "Reset data",
   "Эти действия потребуют подтверждения. Перед очисткой сохраните резервную копию библиотеки.": "These actions require confirmation. Back up your library before clearing it.",
-  "Выберите светлый или тёмный режим. Цветовую гамму можно настроить отдельно.": "Choose light or dark mode. You can adjust the color palette separately."
+  "Выберите светлый или тёмный режим. Цветовую гамму можно настроить отдельно.": "Choose light or dark mode. You can adjust the color palette separately.",
+  "Добавьте первый PDF. Оригинал останется на месте, а в библиотеке сохранится копия.": "Import your first PDF. The original stays intact; a copy is stored in your library.",
+  "На этой полке пока нет книг": "No books on this shelf yet",
+  "Сбросить фильтры": "Reset filters",
+  "Попробуйте другой запрос или сбросьте фильтры.": "Try another search or reset the filters.",
+  "Добавьте книги на полку через меню книги или перетащите их на название полки.": "Add books through their menu or drag them onto the shelf name.",
+  "Здесь можно восстановить книги или удалить их навсегда.": "Restore books here or remove them permanently.",
+  "Книги, перемещённые в корзину, появятся здесь. Их можно будет восстановить.": "Books moved to Trash appear here, ready to restore.",
+  "Выберите книгу для чтения": "Choose a book to read",
+  "Открыть библиотеку": "Open library",
+  "Показано моделей: {0} из {1}": "Showing {0} of {1} models"
 }

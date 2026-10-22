@@ -55,6 +55,12 @@ PDF appearance has separate **Original**, **Dimmed** and **Night** modes. Night 
 
 The [user guide](docs/GUIDE.en.md) covers library and trash navigation, settings, models, backups and troubleshooting. [Installation details](DISTRIBUTION.en.md) cover platform requirements. Both are available in English and Russian.
 
+### A quick walkthrough
+
+![Library, PDF reading, text search and local OCR/translation](docs/images/workflow-en.gif)
+
+Development version, sample document. The scan recognition and translation results come from the local engines; the walkthrough uses prepared results and edited timing. [Recording details](docs/DEMOS.md).
+
 ## Your data
 
 The regular installation stores PDFs, SQLite and models in the application data folder:
