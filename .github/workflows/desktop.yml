@@ -18,14 +18,14 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - run: npm ci
@@ -60,12 +60,12 @@ jobs:
       PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
       SIGN_MACOS: ${{ startsWith(github.ref, 'refs/tags/') && secrets.APPLE_CERTIFICATE != '' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - uses: dtolnay/rust-toolchain@stable
@@ -83,12 +83,12 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --skip worker::tests
       - name: Build installers without Apple certificate
         if: runner.os != 'macOS' || env.SIGN_MACOS != 'true'
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         with:
           args: --config src-tauri/tauri.release.conf.json --bundles ${{ matrix.bundles }}
       - name: Build macOS installer with Developer ID and notarization
         if: runner.os == 'macOS' && env.SIGN_MACOS == 'true'
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -112,7 +112,7 @@ jobs:
       - name: Generate package checksums
         run: python scripts/release_checksums.py "${{ matrix.platform }}"
       - name: Upload installers and portable archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NeuroBookShelf-${{ matrix.platform }}-${{ github.sha }}
           retention-days: 14
@@ -143,11 +143,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: NeuroBookShelf-*-${{ github.sha }}
           path: release-assets
